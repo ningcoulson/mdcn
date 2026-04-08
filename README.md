@@ -62,6 +62,12 @@ mdcn doctor --config config.toml
 mdcn scrape --config config.toml
 ```
 
+Optional: open the local HTML config UI:
+
+```bash
+mdcn config-ui --config config.toml
+```
+
 ## Documentation
 
 See [docs/development_plan.md](docs/development_plan.md) for the current implementation plan.

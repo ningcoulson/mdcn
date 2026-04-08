@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from mdcn.config.loader import load_config
+from mdcn.config.loader import config_to_dict, load_config, render_config_toml, save_config
+from mdcn.config.models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, ScannerConfig, SiteConfig
 from mdcn.domain.errors import ConfigError
 
 
@@ -51,3 +52,38 @@ def test_load_config_requires_source_and_target(tmp_path: Path):
 
     with pytest.raises(ConfigError):
         load_config(config_path)
+
+
+def test_save_config_round_trip(tmp_path: Path):
+    config = AppConfig(
+        paths=PathsConfig(source_dir=Path("/data/inbox"), target_root=Path("/data/library")),
+        output=OutputConfig(max_images=8, folder_template="{number}-{title}"),
+        network=NetworkConfig(proxy="http://127.0.0.1:7890", timeout=30.0, retries=3),
+        scanner=ScannerConfig(extensions=(".mp4", ".mkv")),
+        sites={
+            "madouqu": SiteConfig(enabled=True, base_url="https://madouqu.cc"),
+            "mdtv": SiteConfig(enabled=False, base_url="https://mdtv.example"),
+        },
+    )
+    path = tmp_path / "config.toml"
+
+    save_config(config, path)
+    loaded = load_config(path)
+
+    assert loaded.paths.source_dir == Path("/data/inbox")
+    assert loaded.output.folder_template == "{number}-{title}"
+    assert loaded.network.proxy == "http://127.0.0.1:7890"
+    assert loaded.sites["mdtv"].enabled is False
+
+
+def test_render_config_toml_contains_sections():
+    config = AppConfig(
+        paths=PathsConfig(source_dir=Path("/a"), target_root=Path("/b")),
+        sites={"madouqu": SiteConfig(enabled=True, base_url="https://madouqu.cc")},
+    )
+
+    content = render_config_toml(config)
+
+    assert "[source]" in content
+    assert '[sites.madouqu]' in content
+    assert 'dir = "/a"' in content

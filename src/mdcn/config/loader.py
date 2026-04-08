@@ -26,6 +26,87 @@ def load_config(path: str | Path) -> AppConfig:
     return _build_config(data)
 
 
+def save_config(config: AppConfig, path: str | Path) -> Path:
+    config_path = Path(path)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(render_config_toml(config), encoding="utf-8")
+    return config_path
+
+
+def config_to_dict(config: AppConfig) -> dict[str, Any]:
+    return {
+        "source": {"dir": str(config.paths.source_dir)},
+        "target": {"root": str(config.paths.target_root)},
+        "output": {
+            "max_images": config.output.max_images,
+            "write_nfo": config.output.write_nfo,
+            "write_json": config.output.write_json,
+            "folder_template": config.output.folder_template,
+        },
+        "network": {
+            "proxy": config.network.proxy or "",
+            "timeout": config.network.timeout,
+            "retries": config.network.retries,
+        },
+        "scanner": {"extensions": list(config.scanner.extensions)},
+        "sites": {
+            name: {
+                "enabled": site.enabled,
+                "base_url": site.base_url,
+            }
+            for name, site in config.sites.items()
+        },
+    }
+
+
+def render_config_toml(config: AppConfig) -> str:
+    data = config_to_dict(config)
+    lines: list[str] = []
+
+    lines.extend(["[source]", f'dir = "{_escape_toml_string(data["source"]["dir"])}"', ""])
+    lines.extend(["[target]", f'root = "{_escape_toml_string(data["target"]["root"])}"', ""])
+
+    output = data["output"]
+    lines.extend(
+        [
+            "[output]",
+            f"max_images = {output['max_images']}",
+            f"write_nfo = {_bool_str(output['write_nfo'])}",
+            f"write_json = {_bool_str(output['write_json'])}",
+            f'folder_template = "{_escape_toml_string(output["folder_template"])}"',
+            "",
+        ]
+    )
+
+    network = data["network"]
+    lines.extend(
+        [
+            "[network]",
+            f'proxy = "{_escape_toml_string(network["proxy"])}"',
+            f"timeout = {network['timeout']}",
+            f"retries = {network['retries']}",
+            "",
+        ]
+    )
+
+    scanner = data["scanner"]
+    lines.extend(["[scanner]", f"extensions = [{', '.join(_quote(item) for item in scanner['extensions'])}]", ""])
+
+    sites = data["sites"]
+    for name in sorted(sites):
+        site = sites[name]
+        lines.extend(
+            [
+                f"[sites.{name}]",
+                f"enabled = {_bool_str(site['enabled'])}",
+                f'base_url = "{_escape_toml_string(site["base_url"])}"',
+                "",
+            ]
+        )
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _build_config(data: dict[str, Any]) -> AppConfig:
     source = data.get("source", {})
     target = data.get("target", {})
@@ -73,6 +154,10 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
     )
 
 
+def build_config_from_dict(data: dict[str, Any]) -> AppConfig:
+    return _build_config(data)
+
+
 def _require_path(section: dict[str, Any], key: str, label: str) -> Path:
     value = section.get(key)
     if not value or not isinstance(value, str):
@@ -84,3 +169,15 @@ def _optional_str(value: Any) -> str | None:
     if value in ("", None):
         return None
     return str(value)
+
+
+def _escape_toml_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _quote(value: str) -> str:
+    return f'"{_escape_toml_string(value)}"'
+
+
+def _bool_str(value: bool) -> str:
+    return "true" if value else "false"

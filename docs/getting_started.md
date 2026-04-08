@@ -59,6 +59,29 @@ This prints:
 mdcn scrape --config config.toml
 ```
 
+## Use the HTML Config Page
+
+If you prefer editing settings in a browser instead of hand-writing TOML, start the local config UI:
+
+```bash
+mdcn config-ui --config config.toml
+```
+
+Then open the printed local URL if your browser does not open automatically.
+
+The page currently supports:
+
+- source folder
+- target folder
+- naming rule
+- max image count
+- proxy, timeout, retries
+- video extensions
+- site enable switches
+- site base URLs
+
+After clicking save, the page writes directly back to `config.toml`.
+
 When a file is matched successfully, mdcn will:
 
 1. create a target folder like `{number} {title}`
