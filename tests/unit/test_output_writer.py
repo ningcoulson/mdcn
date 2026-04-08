@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from mdcn2.domain.models import MetadataResult
-from mdcn2.pipeline.writer import OutputWriter
+from mdcn.domain.models import MetadataResult
+from mdcn.pipeline.writer import OutputWriter
 
 
 def test_output_writer_writes_json_and_nfo(tmp_path: Path):

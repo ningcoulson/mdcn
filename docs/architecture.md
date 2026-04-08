@@ -2,7 +2,7 @@
 
 ## Overview
 
-`mdcn2` is split into small modules so that scraper logic, file operations, and persistence do not get tangled together.
+`mdcn` is split into small modules so that scraper logic, file operations, and persistence do not get tangled together.
 
 ## Module Map
 

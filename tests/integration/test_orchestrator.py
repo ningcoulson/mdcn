@@ -4,16 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from mdcn2.config.models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, ScannerConfig, SiteConfig
-from mdcn2.crawlers.base import BaseCrawler
-from mdcn2.crawlers.registry import CrawlerRegistry
-from mdcn2.domain.models import MetadataResult, NumberCandidate
-from mdcn2.pipeline.metadata import MetadataPipeline
-from mdcn2.pipeline.orchestrator import ScrapeOrchestrator
-from mdcn2.pipeline.organizer import FileOrganizer
-from mdcn2.pipeline.resources import ResourcePipeline
-from mdcn2.pipeline.writer import OutputWriter
-from mdcn2.storage.task_repo import TaskRepository
+from mdcn.config.models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, ScannerConfig, SiteConfig
+from mdcn.crawlers.base import BaseCrawler
+from mdcn.crawlers.registry import CrawlerRegistry
+from mdcn.domain.models import MetadataResult, NumberCandidate
+from mdcn.pipeline.metadata import MetadataPipeline
+from mdcn.pipeline.orchestrator import ScrapeOrchestrator
+from mdcn.pipeline.organizer import FileOrganizer
+from mdcn.pipeline.resources import ResourcePipeline
+from mdcn.pipeline.writer import OutputWriter
+from mdcn.storage.task_repo import TaskRepository
 
 
 class FakeCrawler(BaseCrawler):
@@ -59,7 +59,7 @@ async def test_orchestrator_processes_video_end_to_end(tmp_path: Path):
         resource_pipeline=ResourcePipeline(max_images=0),
         writer=OutputWriter(),
         organizer=FileOrganizer(),
-        task_repo=TaskRepository(target_root / ".mdcn2" / "tasks.db"),
+        task_repo=TaskRepository(target_root / ".mdcn" / "tasks.db"),
     )
 
     stats = await orchestrator.run()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mdcn2.storage.task_repo import TaskRepository
+from mdcn.storage.task_repo import TaskRepository
 
 
 def test_task_repo_tracks_success_and_failure(tmp_path: Path):

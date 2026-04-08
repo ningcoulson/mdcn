@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from mdcn2.config.models import SiteConfig
+from mdcn.config.models import SiteConfig
 
 from .base import BaseCrawler
 

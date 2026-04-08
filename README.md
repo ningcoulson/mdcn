@@ -1,6 +1,6 @@
-# mdcn2
+# mdcn
 
-`mdcn2` is a clean-room rewrite of the current `mdcn` workflow, focused on:
+`mdcn` is a clean-room rewrite of the current `mdcn` workflow, focused on:
 
 - stable batch scraping for Chinese original video sites
 - modular crawler boundaries
@@ -40,7 +40,7 @@ Current release target: `0.0.1`
 
 ## Quick Start
 
-1. Copy [config.example.toml](/Volumes/VideoHub/mdcn2/config.example.toml) to `config.toml`.
+1. Copy `config.example.toml` to `config.toml`.
 2. Edit the source and target paths.
 3. Install the package:
 
@@ -53,17 +53,17 @@ pip install -e .[dev]
 4. Check the environment:
 
 ```bash
-mdcn2 doctor --config config.toml
+mdcn doctor --config config.toml
 ```
 
 5. Run a scrape:
 
 ```bash
-mdcn2 scrape --config config.toml
+mdcn scrape --config config.toml
 ```
 
 ## Documentation
 
-See [docs/development_plan.md](/Volumes/VideoHub/mdcn2/docs/development_plan.md) for the current implementation plan.
-See [docs/getting_started.md](/Volumes/VideoHub/mdcn2/docs/getting_started.md) for end-user setup instructions.
-See [docs/architecture.md](/Volumes/VideoHub/mdcn2/docs/architecture.md) for the module layout.
+See [docs/development_plan.md](docs/development_plan.md) for the current implementation plan.
+See [docs/getting_started.md](docs/getting_started.md) for end-user setup instructions.
+See [docs/architecture.md](docs/architecture.md) for the module layout.

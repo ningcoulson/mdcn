@@ -5,17 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from mdcn2.config.models import AppConfig
-from mdcn2.crawlers.registry import CrawlerRegistry
-from mdcn2.domain.enums import FailureReason
-from mdcn2.domain.models import MetadataResult, NumberCandidate, VideoFile
-from mdcn2.pipeline.metadata import MetadataPipeline
-from mdcn2.pipeline.organizer import FileOrganizer
-from mdcn2.pipeline.resources import ResourcePipeline
-from mdcn2.pipeline.writer import OutputWriter
-from mdcn2.scanner.files import iter_video_files
-from mdcn2.scanner.number_parser import extract_candidates
-from mdcn2.storage.task_repo import TaskRepository
+from mdcn.config.models import AppConfig
+from mdcn.crawlers.registry import CrawlerRegistry
+from mdcn.domain.enums import FailureReason
+from mdcn.domain.models import MetadataResult, NumberCandidate, VideoFile
+from mdcn.pipeline.metadata import MetadataPipeline
+from mdcn.pipeline.organizer import FileOrganizer
+from mdcn.pipeline.resources import ResourcePipeline
+from mdcn.pipeline.writer import OutputWriter
+from mdcn.scanner.files import iter_video_files
+from mdcn.scanner.number_parser import extract_candidates
+from mdcn.storage.task_repo import TaskRepository
 
 
 @dataclass(slots=True)

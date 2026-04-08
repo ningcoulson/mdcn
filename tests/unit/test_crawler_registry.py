@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from mdcn2.config.models import SiteConfig
-from mdcn2.crawlers.base import BaseCrawler
-from mdcn2.crawlers.registry import CrawlerRegistry
-from mdcn2.domain.models import MetadataResult, NumberCandidate
+from mdcn.config.models import SiteConfig
+from mdcn.crawlers.base import BaseCrawler
+from mdcn.crawlers.registry import CrawlerRegistry
+from mdcn.domain.models import MetadataResult, NumberCandidate
 
 
 class FakeCrawler(BaseCrawler):

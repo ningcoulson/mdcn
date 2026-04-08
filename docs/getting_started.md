@@ -1,8 +1,8 @@
 # Getting Started
 
-## What mdcn2 Does
+## What mdcn Does
 
-`mdcn2` scans a folder of local video files, extracts number candidates from filenames, queries supported websites for metadata, downloads poster and fanart images, writes `metadata.json` and `NFO`, and then moves the video into a clean library folder.
+`mdcn` scans a folder of local video files, extracts number candidates from filenames, queries supported websites for metadata, downloads poster and fanart images, writes `metadata.json` and `NFO`, and then moves the video into a clean library folder.
 
 Version `0.0.1` is the first usable CLI-oriented build.
 
@@ -29,7 +29,7 @@ pip install -e .[dev]
 
 ## Configure
 
-Copy [config.example.toml](/Volumes/VideoHub/mdcn2/config.example.toml) to `config.toml` and edit the paths:
+Copy `config.example.toml` to `config.toml` and edit the paths:
 
 ```toml
 [source]
@@ -42,12 +42,12 @@ root = "/path/to/library"
 ## Run Diagnostics
 
 ```bash
-mdcn2 doctor --config config.toml
+mdcn doctor --config config.toml
 ```
 
 This prints:
 
-- mdcn2 version
+- mdcn version
 - Python version
 - source path
 - target path
@@ -56,17 +56,17 @@ This prints:
 ## Run a Scrape
 
 ```bash
-mdcn2 scrape --config config.toml
+mdcn scrape --config config.toml
 ```
 
-When a file is matched successfully, mdcn2 will:
+When a file is matched successfully, mdcn will:
 
 1. create a target folder like `{number} {title}`
 2. download poster and fanart
 3. write `metadata.json`
 4. write `NFO`
 5. move the source video into the target folder
-6. record task history in `TARGET_ROOT/.mdcn2/tasks.db`
+6. record task history in `TARGET_ROOT/.mdcn/tasks.db`
 
 ## Output Example
 

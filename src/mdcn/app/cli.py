@@ -7,16 +7,16 @@ import asyncio
 import platform
 from pathlib import Path
 
-from mdcn2 import __version__
-from mdcn2.app.bootstrap import build_orchestrator
-from mdcn2.config.loader import load_config
+from mdcn import __version__
+from mdcn.app.bootstrap import build_orchestrator
+from mdcn.config.loader import load_config
 
 
 def _default_config_path() -> str:
     return str(Path("config.toml"))
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mdcn2", description="Metadata scraper toolkit for Chinese original video workflows")
+    parser = argparse.ArgumentParser(prog="mdcn", description="Metadata scraper toolkit for Chinese original video workflows")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -34,7 +34,7 @@ def main() -> int:
     config = load_config(args.config)
 
     if args.command == "doctor":
-        print(f"mdcn2 version: {__version__}")
+        print(f"mdcn version: {__version__}")
         print(f"python: {platform.python_version()}")
         print(f"source: {config.paths.source_dir}")
         print(f"target: {config.paths.target_root}")

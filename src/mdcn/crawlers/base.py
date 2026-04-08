@@ -6,9 +6,9 @@ import abc
 
 import httpx
 
-from mdcn2.domain.errors import NetworkError, ParseError
-from mdcn2.domain.models import MetadataResult, NumberCandidate
-from mdcn2.network.client import build_async_client
+from mdcn.domain.errors import NetworkError, ParseError
+from mdcn.domain.models import MetadataResult, NumberCandidate
+from mdcn.network.client import build_async_client
 
 
 class BaseCrawler(abc.ABC):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mdcn2.scanner.number_parser import extract_candidates, normalize_filename, normalize_number
+from mdcn.scanner.number_parser import extract_candidates, normalize_filename, normalize_number
 
 
 def test_normalize_filename_cleans_common_symbols():

@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from mdcn2.domain.models import MetadataResult
-from mdcn2.output.json_writer import serialize_metadata
-from mdcn2.output.nfo import build_nfo_xml
+from mdcn.domain.models import MetadataResult
+from mdcn.output.json_writer import serialize_metadata
+from mdcn.output.nfo import build_nfo_xml
 
 
 class OutputWriter:

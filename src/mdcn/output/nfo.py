@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-from mdcn2.domain.models import MetadataResult
+from mdcn.domain.models import MetadataResult
 
 
 def build_nfo_xml(result: MetadataResult) -> str:

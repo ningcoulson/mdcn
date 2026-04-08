@@ -1,4 +1,4 @@
-"""mdcn2 package."""
+"""mdcn package."""
 
 __all__ = ["__version__"]
 

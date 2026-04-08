@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mdcn2.scanner.files import iter_video_files
+from mdcn.scanner.files import iter_video_files
 
 
 def test_iter_video_files_filters_extensions_and_hidden(tmp_path: Path):

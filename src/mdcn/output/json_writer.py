@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mdcn2.domain.models import MetadataResult
+from mdcn.domain.models import MetadataResult
 
 
 def serialize_metadata(result: MetadataResult) -> dict[str, object]:

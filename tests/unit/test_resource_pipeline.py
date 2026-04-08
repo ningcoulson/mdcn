@@ -5,8 +5,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from mdcn2.domain.models import ImageAsset, MetadataResult
-from mdcn2.pipeline.resources import ResourcePipeline
+from mdcn.domain.models import ImageAsset, MetadataResult
+from mdcn.pipeline.resources import ResourcePipeline
 
 
 @pytest.mark.asyncio
@@ -14,9 +14,8 @@ async def test_resource_pipeline_downloads_images(tmp_path: Path, monkeypatch: p
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b"img")
 
-    from mdcn2 import pipeline as pipeline_pkg
-    from mdcn2 import network as network_pkg
-    from mdcn2.pipeline import resources as resources_module
+    from mdcn import network as network_pkg
+    from mdcn.pipeline import resources as resources_module
 
     def build_client(**kwargs):
         return httpx.AsyncClient(transport=httpx.MockTransport(handler), **kwargs)

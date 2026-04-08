@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from mdcn2.config.loader import load_config
-from mdcn2.domain.errors import ConfigError
+from mdcn.config.loader import load_config
+from mdcn.domain.errors import ConfigError
 
 
 def test_load_config_reads_basic_toml(tmp_path: Path):

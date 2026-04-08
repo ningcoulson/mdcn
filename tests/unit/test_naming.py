@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mdcn2.output.naming import build_folder_name, build_image_filename, sanitize_path_component
+from mdcn.output.naming import build_folder_name, build_image_filename, sanitize_path_component
 
 
 def test_sanitize_path_component_removes_reserved_chars():

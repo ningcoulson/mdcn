@@ -3,9 +3,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from mdcn2.crawlers.base import BaseCrawler
-from mdcn2.domain.errors import NetworkError, ParseError
-from mdcn2.domain.models import MetadataResult, NumberCandidate
+from mdcn.crawlers.base import BaseCrawler
+from mdcn.domain.errors import NetworkError, ParseError
+from mdcn.domain.models import MetadataResult, NumberCandidate
 
 
 class DummyCrawler(BaseCrawler):

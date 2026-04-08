@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from mdcn2.domain.errors import ConfigError
+from mdcn.domain.errors import ConfigError
 
 from .models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, ScannerConfig, SiteConfig
 

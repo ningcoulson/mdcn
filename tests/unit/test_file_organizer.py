@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mdcn2.domain.models import MetadataResult
-from mdcn2.pipeline.organizer import FileOrganizer
+from mdcn.domain.models import MetadataResult
+from mdcn.pipeline.organizer import FileOrganizer
 
 
 def test_file_organizer_builds_target_dir(tmp_path: Path):

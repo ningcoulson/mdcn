@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mdcn2.domain.models import MetadataResult
-from mdcn2.network.client import build_async_client
-from mdcn2.output.naming import build_image_filename
+from mdcn.domain.models import MetadataResult
+from mdcn.network.client import build_async_client
+from mdcn.output.naming import build_image_filename
 
 
 class ResourcePipeline:

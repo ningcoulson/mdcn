@@ -5,8 +5,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from mdcn2.domain.models import MetadataResult
-from mdcn2.output.naming import build_folder_name
+from mdcn.domain.models import MetadataResult
+from mdcn.output.naming import build_folder_name
 
 
 class FileOrganizer:

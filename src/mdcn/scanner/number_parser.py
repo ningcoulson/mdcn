@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from mdcn2.domain.models import NumberCandidate
+from mdcn.domain.models import NumberCandidate
 
 _TRAILING_DISC_RE = re.compile(r"(?i)(?:[-_ ]?)(CD|DISC|PART)[-_ ]?\d+$")
 _DELIMITED_RE = re.compile(r"([A-Za-z0-9]+-[A-Za-z0-9]+)")

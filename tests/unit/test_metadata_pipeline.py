@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from mdcn2.domain.models import MetadataResult
-from mdcn2.pipeline.metadata import MetadataPipeline
+from mdcn.domain.models import MetadataResult
+from mdcn.pipeline.metadata import MetadataPipeline
 
 
 def test_metadata_pipeline_normalizes_whitespace_and_dedupes():

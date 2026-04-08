@@ -1,4 +1,4 @@
-# mdcn2 Development Plan
+# mdcn Development Plan
 
 ## Goals
 

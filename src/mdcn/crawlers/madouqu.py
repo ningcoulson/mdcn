@@ -9,8 +9,8 @@ from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 import httpx
 from parsel import Selector
 
-from mdcn2.domain.errors import CrawlMismatchError, ParseError, SearchError
-from mdcn2.domain.models import ImageAsset, MetadataResult, NumberCandidate
+from mdcn.domain.errors import CrawlMismatchError, ParseError, SearchError
+from mdcn.domain.models import ImageAsset, MetadataResult, NumberCandidate
 
 from .base import BaseCrawler
 

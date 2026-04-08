@@ -5,9 +5,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from mdcn2.crawlers.mdtv import MadouTVCrawler
-from mdcn2.domain.errors import SearchError
-from mdcn2.domain.models import NumberCandidate
+from mdcn.crawlers.mdtv import MadouTVCrawler
+from mdcn.domain.errors import SearchError
+from mdcn.domain.models import NumberCandidate
 
 
 @pytest.mark.asyncio
