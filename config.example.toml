@@ -18,10 +18,25 @@ retries = 2
 [scanner]
 extensions = [".mp4", ".mkv", ".avi", ".ts", ".mov", ".wmv", ".flv", ".m4v", ".webm"]
 
+[priority]
+site_order = ["madouqu", "mdtv", "madouclub", "avjia"]
+
 [sites.madouqu]
 enabled = true
 base_url = "https://madouqu.cc"
+mirrors = []
 
 [sites.mdtv]
 enabled = true
 base_url = "https://www.mdpjzip.xyz"
+mirrors = []
+
+[sites.madouclub]
+enabled = true
+base_url = "https://madou.club"
+mirrors = []
+
+[sites.avjia]
+enabled = true
+base_url = "https://avjia.net"
+mirrors = []

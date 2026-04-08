@@ -14,6 +14,21 @@ Version `0.0.1` is the first usable CLI-oriented build.
 
 ## Install
 
+### Fastest Start
+
+If you want the shortest path and are on macOS or Linux:
+
+```bash
+./scripts/quickstart.sh
+```
+
+This will:
+
+- create `.venv`
+- install `mdcn`
+- create `config.toml` if missing
+- launch the local HTML config UI
+
 ### 1. Create and activate a virtual environment
 
 ```bash
@@ -45,6 +60,12 @@ root = "/path/to/library"
 mdcn doctor --config config.toml
 ```
 
+To probe site and mirror health:
+
+```bash
+mdcn doctor --config config.toml --check-sites
+```
+
 This prints:
 
 - mdcn version
@@ -57,6 +78,22 @@ This prints:
 
 ```bash
 mdcn scrape --config config.toml
+```
+
+## Retry Only Failed Files
+
+If some files failed in a previous run and still exist on disk, retry only those tasks:
+
+```bash
+mdcn retry-failed --config config.toml
+```
+
+## Inspect Task History
+
+Use the CLI if you want a quick terminal view of recent records:
+
+```bash
+mdcn tasks --config config.toml --status failed
 ```
 
 ## Use the HTML Config Page
@@ -74,13 +111,40 @@ The page currently supports:
 - source folder
 - target folder
 - naming rule
+- naming rule preview
+- site priority order
 - max image count
 - proxy, timeout, retries
 - video extensions
 - site enable switches
 - site base URLs
+- save and start scrape
+- save and retry failed tasks
+- recent run status
+- recent task list
 
 After clicking save, the page writes directly back to `config.toml`.
+
+Naming templates support these placeholders:
+
+- `{number}`
+- `{title}`
+- `{studio}`
+- `{series}`
+- `{source}`
+- `{year}`
+- `{actors}`
+
+Example templates:
+
+- `{number} {title}`
+- `{studio}/{number} {title}`
+- `{year}/{number} {title}`
+
+Crawler priority example:
+
+- `madouqu, mdtv`
+- `mdtv, madouqu`
 
 When a file is matched successfully, mdcn will:
 
@@ -106,5 +170,7 @@ Library/
 
 - `madouqu`
 - `mdtv`
+- `madouclub`
+- `avjia`
 
 More sites can be added without changing the rest of the pipeline because each crawler is isolated behind the shared crawler interface.

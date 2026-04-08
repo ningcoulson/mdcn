@@ -88,6 +88,81 @@ class TaskRepository:
                 (video_path, reason, detail),
             )
 
+    def list_failed_video_paths(self) -> list[str]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT video_path
+                FROM tasks
+                WHERE status = 'failed'
+                ORDER BY updated_at DESC, id DESC
+                """
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def list_recent_tasks(
+        self,
+        limit: int = 10,
+        status: str | None = None,
+        query: str | None = None,
+    ) -> list[dict[str, str]]:
+        with self._connect() as conn:
+            conditions: list[str] = []
+            params: list[str | int] = []
+            if status and status != "all":
+                conditions.append("status = ?")
+                params.append(status)
+            if query:
+                like = f"%{query.strip()}%"
+                conditions.append("(video_path LIKE ? OR number LIKE ? OR source LIKE ? OR reason LIKE ? OR detail LIKE ?)")
+                params.extend([like, like, like, like, like])
+
+            sql = """
+                SELECT video_path, status, number, source, target_dir, reason, detail, updated_at
+                FROM tasks
+            """
+            if conditions:
+                sql += " WHERE " + " AND ".join(conditions)
+            sql += " ORDER BY updated_at DESC, id DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(sql, tuple(params)).fetchall()
+        return [
+            {
+                "video_path": row[0],
+                "status": row[1],
+                "number": row[2],
+                "source": row[3],
+                "target_dir": row[4],
+                "reason": row[5],
+                "detail": row[6],
+                "updated_at": row[7],
+            }
+            for row in rows
+        ]
+
+    def get_task(self, video_path: str) -> dict[str, str] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT video_path, status, number, source, target_dir, reason, detail, updated_at
+                FROM tasks
+                WHERE video_path = ?
+                """,
+                (video_path,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "video_path": row[0],
+            "status": row[1],
+            "number": row[2],
+            "source": row[3],
+            "target_dir": row[4],
+            "reason": row[5],
+            "detail": row[6],
+            "updated_at": row[7],
+        }
+
     def summary(self) -> dict[str, int]:
         with self._connect() as conn:
             rows = conn.execute("SELECT status, COUNT(*) FROM tasks GROUP BY status").fetchall()

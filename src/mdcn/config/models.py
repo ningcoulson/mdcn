@@ -39,6 +39,12 @@ class ScannerConfig:
 class SiteConfig:
     enabled: bool = True
     base_url: str = ""
+    mirrors: tuple[str, ...] = ()
+
+
+@dataclass(slots=True)
+class PriorityConfig:
+    site_order: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -47,4 +53,5 @@ class AppConfig:
     output: OutputConfig = field(default_factory=OutputConfig)
     network: NetworkConfig = field(default_factory=NetworkConfig)
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
+    priority: PriorityConfig = field(default_factory=PriorityConfig)
     sites: dict[str, SiteConfig] = field(default_factory=dict)

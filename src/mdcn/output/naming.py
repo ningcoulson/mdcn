@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from typing import Any
+
+DEFAULT_FOLDER_TEMPLATE = "{number} {title}"
+_TOKEN_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 def sanitize_path_component(text: str) -> str:
@@ -14,12 +19,61 @@ def sanitize_path_component(text: str) -> str:
     return value.rstrip(". ")
 
 
-def build_folder_name(number: str, title: str) -> str:
-    safe_number = sanitize_path_component(number)
-    safe_title = sanitize_path_component(title)
-    if safe_number and safe_title:
-        return f"{safe_number} {safe_title}"
-    return safe_number or safe_title or "unknown"
+def build_template_context(**values: Any) -> dict[str, str]:
+    context: dict[str, str] = {}
+    for key, value in values.items():
+        if isinstance(value, list):
+            context[key] = ", ".join(str(item) for item in value if str(item).strip())
+            continue
+        if value is None:
+            context[key] = ""
+            continue
+        context[key] = str(value)
+    return context
+
+
+def render_folder_template(template: str, context: dict[str, Any]) -> str:
+    source = template.strip() or DEFAULT_FOLDER_TEMPLATE
+    safe_context = build_template_context(**context)
+
+    def replace_token(match: re.Match[str]) -> str:
+        return safe_context.get(match.group(1), "")
+
+    rendered = _TOKEN_RE.sub(replace_token, source)
+    parts = [sanitize_path_component(part) for part in rendered.replace("\\", "/").split("/")]
+    clean_parts = [part for part in parts if part]
+    if clean_parts:
+        return "/".join(clean_parts)
+
+    fallback = sanitize_path_component(safe_context.get("number", ""))
+    if fallback:
+        return fallback
+    fallback = sanitize_path_component(safe_context.get("title", ""))
+    return fallback or "unknown"
+
+
+def build_folder_name(number: str, title: str, template: str = DEFAULT_FOLDER_TEMPLATE, **extra: Any) -> str:
+    context = build_template_context(number=number, title=title, **extra)
+    return render_folder_template(template, context)
+
+
+def build_folder_path(number: str, title: str, template: str = DEFAULT_FOLDER_TEMPLATE, **extra: Any) -> Path:
+    folder_name = build_folder_name(number, title, template, **extra)
+    return Path(*folder_name.split("/"))
+
+
+def preview_folder_name(template: str, **sample: Any) -> str:
+    default_sample = {
+        "number": "MD-001",
+        "title": "Sample Title",
+        "studio": "Madou",
+        "series": "Series Name",
+        "source": "madouqu",
+        "year": "2024",
+        "actors": ["Performer A", "Performer B"],
+    }
+    default_sample.update(sample)
+    return render_folder_template(template, default_sample)
 
 
 def build_image_filename(number: str, kind: str, index: int = 1, url: str = "") -> str:

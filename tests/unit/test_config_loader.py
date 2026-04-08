@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from mdcn.config.loader import config_to_dict, load_config, render_config_toml, save_config
-from mdcn.config.models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, ScannerConfig, SiteConfig
+from mdcn.config.models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, PriorityConfig, ScannerConfig, SiteConfig
 from mdcn.domain.errors import ConfigError
 
 
@@ -25,9 +25,13 @@ max_images = 8
 [scanner]
 extensions = [".mp4", ".mkv"]
 
+[priority]
+site_order = ["madouqu"]
+
 [sites.madouqu]
 enabled = true
 base_url = "https://madouqu.cc"
+mirrors = ["https://mirror.madouqu.cc"]
 """.strip(),
         encoding="utf-8",
     )
@@ -38,7 +42,9 @@ base_url = "https://madouqu.cc"
     assert config.paths.target_root == Path("/data/library")
     assert config.output.max_images == 8
     assert config.scanner.normalized_extensions() == {".mp4", ".mkv"}
+    assert config.priority.site_order == ("madouqu",)
     assert config.sites["madouqu"].base_url == "https://madouqu.cc"
+    assert config.sites["madouqu"].mirrors == ("https://mirror.madouqu.cc",)
 
 
 def test_load_config_raises_for_missing_file(tmp_path: Path):
@@ -60,9 +66,10 @@ def test_save_config_round_trip(tmp_path: Path):
         output=OutputConfig(max_images=8, folder_template="{number}-{title}"),
         network=NetworkConfig(proxy="http://127.0.0.1:7890", timeout=30.0, retries=3),
         scanner=ScannerConfig(extensions=(".mp4", ".mkv")),
+        priority=PriorityConfig(site_order=("mdtv", "madouqu")),
         sites={
-            "madouqu": SiteConfig(enabled=True, base_url="https://madouqu.cc"),
-            "mdtv": SiteConfig(enabled=False, base_url="https://mdtv.example"),
+            "madouqu": SiteConfig(enabled=True, base_url="https://madouqu.cc", mirrors=("https://mirror.madouqu.cc",)),
+            "mdtv": SiteConfig(enabled=False, base_url="https://mdtv.example", mirrors=("https://mirror1.example", "https://mirror2.example")),
         },
     )
     path = tmp_path / "config.toml"
@@ -73,7 +80,9 @@ def test_save_config_round_trip(tmp_path: Path):
     assert loaded.paths.source_dir == Path("/data/inbox")
     assert loaded.output.folder_template == "{number}-{title}"
     assert loaded.network.proxy == "http://127.0.0.1:7890"
+    assert loaded.priority.site_order == ("mdtv", "madouqu")
     assert loaded.sites["mdtv"].enabled is False
+    assert loaded.sites["mdtv"].mirrors == ("https://mirror1.example", "https://mirror2.example")
 
 
 def test_render_config_toml_contains_sections():
@@ -85,5 +94,7 @@ def test_render_config_toml_contains_sections():
     content = render_config_toml(config)
 
     assert "[source]" in content
+    assert "[priority]" in content
     assert '[sites.madouqu]' in content
     assert 'dir = "/a"' in content
+    assert "mirrors = []" in content

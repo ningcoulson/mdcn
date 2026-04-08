@@ -32,7 +32,7 @@ class FakeCrawler(BaseCrawler):
         return "<html></html>"
 
     async def parse(self, html: str, url: str, candidate: NumberCandidate, *, file_hint: str = "") -> MetadataResult:
-        return MetadataResult(number=candidate.normalized, title="示例标题")
+        return MetadataResult(number=candidate.normalized, title="示例标题", studio="Madou")
 
 
 @pytest.mark.asyncio
@@ -46,7 +46,7 @@ async def test_orchestrator_processes_video_end_to_end(tmp_path: Path):
 
     config = AppConfig(
         paths=PathsConfig(source_dir=source_dir, target_root=target_root),
-        output=OutputConfig(write_nfo=True, write_json=True),
+        output=OutputConfig(write_nfo=True, write_json=True, folder_template="{studio}/{number} {title}"),
         network=NetworkConfig(),
         scanner=ScannerConfig(extensions=(".mp4",)),
         sites={"fake": SiteConfig(enabled=True, base_url="https://example.com")},
@@ -58,7 +58,7 @@ async def test_orchestrator_processes_video_end_to_end(tmp_path: Path):
         metadata_pipeline=MetadataPipeline(),
         resource_pipeline=ResourcePipeline(max_images=0),
         writer=OutputWriter(),
-        organizer=FileOrganizer(),
+        organizer=FileOrganizer(folder_template=config.output.folder_template),
         task_repo=TaskRepository(target_root / ".mdcn" / "tasks.db"),
     )
 
@@ -66,8 +66,46 @@ async def test_orchestrator_processes_video_end_to_end(tmp_path: Path):
 
     assert stats.scanned == 1
     assert stats.succeeded == 1
-    output_dir = target_root / "MD-001 示例标题"
+    output_dir = target_root / "Madou" / "MD-001 示例标题"
     assert output_dir.exists()
     assert (output_dir / "MD001.mp4").exists()
     assert (output_dir / "metadata.json").exists()
     assert (output_dir / "MD-001.nfo").exists()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_retries_failed_tasks(tmp_path: Path):
+    source_dir = tmp_path / "failed"
+    target_root = tmp_path / "library"
+    source_dir.mkdir()
+    target_root.mkdir()
+    video_path = source_dir / "MD002.mp4"
+    video_path.write_bytes(b"video")
+
+    config = AppConfig(
+        paths=PathsConfig(source_dir=source_dir, target_root=target_root),
+        output=OutputConfig(write_nfo=False, write_json=True),
+        network=NetworkConfig(),
+        scanner=ScannerConfig(extensions=(".mp4",)),
+        sites={"fake": SiteConfig(enabled=True, base_url="https://example.com")},
+    )
+
+    task_repo = TaskRepository(target_root / ".mdcn" / "tasks.db")
+    task_repo.mark_failure(str(video_path), reason="no_match", detail="temporary")
+
+    orchestrator = ScrapeOrchestrator(
+        config=config,
+        registry=CrawlerRegistry([FakeCrawler()]),
+        metadata_pipeline=MetadataPipeline(),
+        resource_pipeline=ResourcePipeline(max_images=0),
+        writer=OutputWriter(),
+        organizer=FileOrganizer(folder_template=config.output.folder_template),
+        task_repo=task_repo,
+    )
+
+    stats = await orchestrator.retry_failed()
+
+    assert stats.scanned == 1
+    assert stats.succeeded == 1
+    assert task_repo.was_processed(str(video_path)) is True
+    assert (target_root / "MD-002 示例标题" / "MD002.mp4").exists()

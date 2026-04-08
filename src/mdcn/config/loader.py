@@ -7,7 +7,7 @@ from typing import Any
 
 from mdcn.domain.errors import ConfigError
 
-from .models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, ScannerConfig, SiteConfig
+from .models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, PriorityConfig, ScannerConfig, SiteConfig
 
 try:
     import tomllib
@@ -49,10 +49,12 @@ def config_to_dict(config: AppConfig) -> dict[str, Any]:
             "retries": config.network.retries,
         },
         "scanner": {"extensions": list(config.scanner.extensions)},
+        "priority": {"site_order": list(config.priority.site_order)},
         "sites": {
             name: {
                 "enabled": site.enabled,
                 "base_url": site.base_url,
+                "mirrors": list(site.mirrors),
             }
             for name, site in config.sites.items()
         },
@@ -92,6 +94,9 @@ def render_config_toml(config: AppConfig) -> str:
     scanner = data["scanner"]
     lines.extend(["[scanner]", f"extensions = [{', '.join(_quote(item) for item in scanner['extensions'])}]", ""])
 
+    priority = data["priority"]
+    lines.extend(["[priority]", f"site_order = [{', '.join(_quote(item) for item in priority['site_order'])}]", ""])
+
     sites = data["sites"]
     for name in sorted(sites):
         site = sites[name]
@@ -100,6 +105,7 @@ def render_config_toml(config: AppConfig) -> str:
                 f"[sites.{name}]",
                 f"enabled = {_bool_str(site['enabled'])}",
                 f'base_url = "{_escape_toml_string(site["base_url"])}"',
+                f"mirrors = [{', '.join(_quote(item) for item in site['mirrors'])}]",
                 "",
             ]
         )
@@ -135,6 +141,11 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
         extensions=tuple(str(ext) for ext in scanner_raw.get("extensions", ScannerConfig().extensions)),
     )
 
+    priority_raw = data.get("priority", {})
+    priority = PriorityConfig(
+        site_order=tuple(str(name).strip() for name in priority_raw.get("site_order", ()) if str(name).strip()),
+    )
+
     sites_raw = data.get("sites", {})
     sites: dict[str, SiteConfig] = {}
     for name, raw in sites_raw.items():
@@ -143,6 +154,7 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
         sites[name] = SiteConfig(
             enabled=bool(raw.get("enabled", True)),
             base_url=str(raw.get("base_url", "")),
+            mirrors=tuple(str(item).strip() for item in raw.get("mirrors", ()) if str(item).strip()),
         )
 
     return AppConfig(
@@ -150,6 +162,7 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
         output=output,
         network=network,
         scanner=scanner,
+        priority=priority,
         sites=sites,
     )
 

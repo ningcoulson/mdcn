@@ -7,6 +7,16 @@ from pathlib import Path
 from mdcn.domain.models import VideoFile
 
 
+def build_video_file(path: Path) -> VideoFile:
+    stat = path.stat()
+    return VideoFile(
+        path=path,
+        stem=path.stem,
+        extension=path.suffix.lower(),
+        size=stat.st_size,
+    )
+
+
 def iter_video_files(root: Path, extensions: set[str]) -> list[VideoFile]:
     files: list[VideoFile] = []
     for path in sorted(root.iterdir(), key=lambda item: item.name.lower()):
@@ -16,13 +26,5 @@ def iter_video_files(root: Path, extensions: set[str]) -> list[VideoFile]:
             continue
         if path.suffix.lower() not in extensions:
             continue
-        stat = path.stat()
-        files.append(
-            VideoFile(
-                path=path,
-                stem=path.stem,
-                extension=path.suffix.lower(),
-                size=stat.st_size,
-            )
-        )
+        files.append(build_video_file(path))
     return files

@@ -13,7 +13,7 @@ from mdcn.pipeline.metadata import MetadataPipeline
 from mdcn.pipeline.organizer import FileOrganizer
 from mdcn.pipeline.resources import ResourcePipeline
 from mdcn.pipeline.writer import OutputWriter
-from mdcn.scanner.files import iter_video_files
+from mdcn.scanner.files import build_video_file, iter_video_files
 from mdcn.scanner.number_parser import extract_candidates
 from mdcn.storage.task_repo import TaskRepository
 
@@ -46,11 +46,30 @@ class ScrapeOrchestrator:
         self.organizer = organizer
         self.task_repo = task_repo
 
-    async def run(self) -> RunStats:
-        files = iter_video_files(self.config.paths.source_dir, self.config.scanner.normalized_extensions())
+    async def run(self, files: list[VideoFile] | None = None) -> RunStats:
+        if files is None:
+            files = iter_video_files(self.config.paths.source_dir, self.config.scanner.normalized_extensions())
         stats = RunStats(scanned=len(files))
         for video in files:
             outcome = await self.process_video(video)
+            setattr(stats, outcome, getattr(stats, outcome) + 1)
+        return stats
+
+    async def retry_failed(self) -> RunStats:
+        return await self.retry_video_paths(self.task_repo.list_failed_video_paths())
+
+    async def retry_video_paths(self, video_paths: list[str]) -> RunStats:
+        stats = RunStats()
+        for video_path in video_paths:
+            path = Path(video_path)
+            if not path.exists() or not path.is_file():
+                stats.skipped += 1
+                continue
+            if path.suffix.lower() not in self.config.scanner.normalized_extensions():
+                stats.skipped += 1
+                continue
+            stats.scanned += 1
+            outcome = await self.process_video(build_video_file(path))
             setattr(stats, outcome, getattr(stats, outcome) + 1)
         return stats
 
@@ -65,7 +84,7 @@ class ScrapeOrchestrator:
             self.task_repo.mark_failure(video_path, reason=FailureReason.NO_CANDIDATE.value)
             return "failed"
 
-        for crawler in self.registry.get_enabled(self.config.sites):
+        for crawler in self.registry.get_enabled(self.config.sites, self.config.priority.site_order):
             for candidate in candidates:
                 try:
                     result = await crawler.run(candidate, file_hint=video.path.name)

@@ -6,13 +6,25 @@ import shutil
 from pathlib import Path
 
 from mdcn.domain.models import MetadataResult
-from mdcn.output.naming import build_folder_name
+from mdcn.output.naming import DEFAULT_FOLDER_TEMPLATE, build_folder_path
 
 
 class FileOrganizer:
+    def __init__(self, folder_template: str = DEFAULT_FOLDER_TEMPLATE) -> None:
+        self.folder_template = folder_template
+
     def build_target_dir(self, result: MetadataResult, target_root: Path) -> Path:
-        folder_name = build_folder_name(result.number, result.title)
-        return target_root / folder_name
+        folder_path = build_folder_path(
+            result.number,
+            result.title,
+            self.folder_template,
+            studio=result.studio,
+            series=result.series,
+            source=result.source,
+            year=result.year,
+            actors=result.actors,
+        )
+        return target_root / folder_path
 
     def move_video(self, source: Path, target_dir: Path) -> Path:
         target_dir.mkdir(parents=True, exist_ok=True)
