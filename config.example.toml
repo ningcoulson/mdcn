@@ -1,0 +1,27 @@
+[source]
+dir = "/path/to/failed"
+
+[target]
+root = "/path/to/library"
+
+[output]
+max_images = 6
+write_nfo = true
+write_json = true
+folder_template = "{number} {title}"
+
+[network]
+proxy = ""
+timeout = 20
+retries = 2
+
+[scanner]
+extensions = [".mp4", ".mkv", ".avi", ".ts", ".mov", ".wmv", ".flv", ".m4v", ".webm"]
+
+[sites.madouqu]
+enabled = true
+base_url = "https://madouqu.cc"
+
+[sites.mdtv]
+enabled = true
+base_url = "https://www.mdpjzip.xyz"
