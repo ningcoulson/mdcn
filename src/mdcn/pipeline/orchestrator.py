@@ -157,7 +157,7 @@ class ScrapeOrchestrator:
             self.writer.write_metadata_json(normalized, target_dir)
         if self.config.output.write_nfo:
             self.writer.write_nfo(normalized, target_dir)
-        self.organizer.move_video(video.path, target_dir)
+        self.organizer.move_video(video.path, target_dir, normalized)
         poster_path = ""
         for image in normalized.images:
             if image.kind == "poster" and image.local_path is not None:

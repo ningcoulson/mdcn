@@ -108,7 +108,7 @@ async def test_orchestrator_processes_video_end_to_end(tmp_path: Path):
     assert stats.succeeded == 1
     output_dir = target_root / "Madou" / "MD-001 示例标题"
     assert output_dir.exists()
-    assert (output_dir / "MD001.mp4").exists()
+    assert (output_dir / "MD-001 示例标题.mp4").exists()
     assert (output_dir / "metadata.json").exists()
     assert (output_dir / "MD-001.nfo").exists()
 
@@ -148,7 +148,7 @@ async def test_orchestrator_retries_failed_tasks(tmp_path: Path):
     assert stats.scanned == 1
     assert stats.succeeded == 1
     assert task_repo.was_processed(str(video_path)) is True
-    assert (target_root / "MD-002 示例标题" / "MD002.mp4").exists()
+    assert (target_root / "MD-002 示例标题" / "MD-002 示例标题.mp4").exists()
 
 
 @pytest.mark.asyncio
