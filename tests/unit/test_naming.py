@@ -27,11 +27,9 @@ def test_preview_folder_name_uses_template_tokens():
 
 def test_build_image_filename_defaults_to_jpg_and_adds_index():
     assert build_image_filename("MD001", "poster") == "MD001_poster.jpg"
+    assert build_image_filename("MD001", "poster", url="https://a/b.png") == "MD001_poster.jpg"
     assert build_image_filename("MD001", "extrafanart", index=2, url="https://a/b.png?x=1") == "MD001_extrafanart_2.png"
 
 
-def test_build_video_filename_uses_template_leaf_and_keeps_suffix():
-    assert (
-        build_video_filename("MD-001", "示例标题", ".mkv", "{studio}/{number} {title}", studio="Madou")
-        == "MD-001 示例标题.mkv"
-    )
+def test_build_video_filename_uses_number_and_keeps_suffix():
+    assert build_video_filename("MD-001", "示例标题", ".mkv") == "MD-001.mkv"

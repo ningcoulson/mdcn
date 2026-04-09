@@ -28,17 +28,7 @@ class FileOrganizer:
 
     def move_video(self, source: Path, target_dir: Path, result: MetadataResult) -> Path:
         target_dir.mkdir(parents=True, exist_ok=True)
-        destination_name = build_video_filename(
-            result.number,
-            result.title,
-            source.suffix,
-            self.folder_template,
-            studio=result.studio,
-            series=result.series,
-            source=result.source,
-            year=result.year,
-            actors=result.actors,
-        )
+        destination_name = build_video_filename(result.number, result.title, source.suffix)
         destination = target_dir / destination_name
         if destination.exists():
             destination = target_dir / _generate_unique_name(target_dir, destination_name)

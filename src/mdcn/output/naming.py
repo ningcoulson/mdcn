@@ -76,11 +76,8 @@ def preview_folder_name(template: str, **sample: Any) -> str:
     return render_folder_template(template, default_sample)
 
 
-def build_video_filename(number: str, title: str, suffix: str, template: str = DEFAULT_FOLDER_TEMPLATE, **extra: Any) -> str:
-    rendered = build_folder_name(number, title, template, **extra)
-    basename = sanitize_path_component(rendered.split("/")[-1]) if rendered else ""
-    if not basename:
-        basename = sanitize_path_component(number) or sanitize_path_component(title) or "unknown"
+def build_video_filename(number: str, title: str, suffix: str) -> str:
+    basename = sanitize_path_component(number) or sanitize_path_component(title) or "unknown"
     final_suffix = suffix or ".mp4"
     if not final_suffix.startswith("."):
         final_suffix = "." + final_suffix
@@ -88,12 +85,15 @@ def build_video_filename(number: str, title: str, suffix: str, template: str = D
 
 
 def build_image_filename(number: str, kind: str, index: int = 1, url: str = "") -> str:
-    suffix = Path(url).suffix if url else ""
-    suffix = suffix.split("?")[0] if suffix else ""
-    if not suffix:
-        suffix = ".jpg"
     base = sanitize_path_component(number).replace(" ", "_") or "unknown"
     asset_kind = sanitize_path_component(kind).replace(" ", "_") or "image"
+    if asset_kind.lower() == "poster":
+        suffix = ".jpg"
+    else:
+        suffix = Path(url).suffix if url else ""
+        suffix = suffix.split("?")[0] if suffix else ""
+        if not suffix:
+            suffix = ".jpg"
     if index > 1:
         return f"{base}_{asset_kind}_{index}{suffix}"
     return f"{base}_{asset_kind}{suffix}"

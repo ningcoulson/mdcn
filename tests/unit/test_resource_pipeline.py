@@ -70,3 +70,41 @@ async def test_resource_pipeline_retries_transient_download_failure(tmp_path: Pa
 
     assert attempts["count"] == 2
     assert processed.images[0].local_path is not None
+
+
+@pytest.mark.asyncio
+async def test_resource_pipeline_keeps_single_numbered_poster_and_cleans_legacy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"img")
+
+    from mdcn import network as network_pkg
+    from mdcn.pipeline import resources as resources_module
+
+    def build_client(**kwargs):
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(network_pkg, "build_async_client", build_client)
+    monkeypatch.setattr(resources_module, "build_async_client", build_client)
+
+    legacy = tmp_path / "poster.jpg"
+    legacy.write_bytes(b"legacy")
+    extra_old = tmp_path / "OLD_poster.jpg"
+    extra_old.write_bytes(b"old")
+
+    result = MetadataResult(
+        number="MD-002",
+        title="Title",
+        images=[
+            ImageAsset(url="https://example.com/p1.jpg", kind="poster"),
+            ImageAsset(url="https://example.com/p2.png", kind="poster"),
+        ],
+    )
+
+    pipeline = ResourcePipeline(max_images=6)
+    processed = await pipeline.process(result, tmp_path)
+
+    canonical = tmp_path / "MD-002_poster.jpg"
+    assert canonical.exists()
+    assert processed.images[0].local_path == canonical
+    assert not legacy.exists()
+    assert not extra_old.exists()

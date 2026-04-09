@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from mdcn.domain.models import MetadataResult
@@ -22,8 +23,15 @@ class ResourcePipeline:
             return result
 
         target_dir.mkdir(parents=True, exist_ok=True)
+        counters: dict[str, int] = {}
+        canonical_poster_path: Path | None = None
         async with build_async_client(proxy=self.proxy, timeout=self.timeout) as client:
-            for index, image in enumerate(result.images[: self.max_images], start=1):
+            for image in result.images[: self.max_images]:
+                kind = (image.kind or "image").strip().lower()
+                if kind == "poster" and counters.get("poster", 0) >= 1:
+                    continue
+                index = counters.get(kind, 0) + 1
+                counters[kind] = index
                 filename = build_image_filename(result.number or result.title, image.kind, index=index, url=image.url)
                 destination = target_dir / filename
                 try:
@@ -42,4 +50,20 @@ class ResourcePipeline:
 
                 destination.write_bytes(response.content)
                 image.local_path = destination
+                if kind == "poster":
+                    canonical_poster_path = destination
+        self._cleanup_legacy_posters(target_dir, canonical_poster_path)
         return result
+
+    def _cleanup_legacy_posters(self, target_dir: Path, canonical_poster_path: Path | None) -> None:
+        if canonical_poster_path is None:
+            return
+        poster_pattern = re.compile(r"(?i)^(poster|.+_poster(?:_\d+)?)\.[a-z0-9]+$")
+        canonical_name = canonical_poster_path.name
+        for path in target_dir.iterdir():
+            if not path.is_file():
+                continue
+            if path.name == canonical_name:
+                continue
+            if poster_pattern.match(path.name):
+                path.unlink(missing_ok=True)
