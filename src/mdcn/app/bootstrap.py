@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Callable
 
 from mdcn.config.models import AppConfig
 from mdcn.crawlers import AvJiaCrawler, CrawlerRegistry, MadouClubCrawler, MadouQuCrawler, TianmeiCrawler
@@ -73,7 +74,11 @@ def build_crawlers(config: AppConfig) -> list[object]:
     return crawlers
 
 
-def build_orchestrator(config: AppConfig) -> ScrapeOrchestrator:
+def build_orchestrator(
+    config: AppConfig,
+    *,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> ScrapeOrchestrator:
     task_repo = TaskRepository(config.paths.target_root / ".mdcn" / "tasks.db")
     return ScrapeOrchestrator(
         config=config,
@@ -88,4 +93,5 @@ def build_orchestrator(config: AppConfig) -> ScrapeOrchestrator:
         writer=OutputWriter(),
         organizer=FileOrganizer(folder_template=config.output.folder_template),
         task_repo=task_repo,
+        progress_callback=progress_callback,
     )

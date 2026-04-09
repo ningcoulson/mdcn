@@ -64,6 +64,12 @@ def test_render_config_ui_html_contains_expected_controls():
     html = render_config_ui_html()
 
     assert "Config Studio" in html
+    assert 'id="rainCanvas"' in html
+    assert 'id="rainFallback"' in html
+    assert 'id="homeView"' in html
+    assert 'id="settingsView"' in html
+    assert 'id="filesView"' in html
+    assert 'id="historyView"' in html
     assert 'id="source_dir"' in html
     assert 'id="target_root"' in html
     assert 'id="pathStatusText"' in html
@@ -73,13 +79,22 @@ def test_render_config_ui_html_contains_expected_controls():
     assert 'id="site_order"' in html
     assert 'id="previewText"' in html
     assert 'id="runButton"' in html
+    assert 'id="runButtonHome"' in html
     assert 'id="retryFailedButton"' in html
+    assert 'id="retryFailedButtonHome"' in html
+    assert 'id="progressFill"' in html
+    assert 'id="currentCrawlerTag"' in html
+    assert 'id="currentCandidateTag"' in html
     assert 'id="taskList"' in html
     assert 'id="refreshTasksButton"' in html
     assert 'id="taskSearch"' in html
     assert 'id="taskDetailDialog"' in html
     assert 'id="welcomeNotice"' in html
     assert 'id="welcomeAlert"' in html
+    assert 'id="currentPosterImage"' in html
+    assert 'id="activityLogText"' in html
+    assert 'id="recentPosterRail"' in html
+    assert 'id="openSourceDirButton"' in html
     assert 'id="site_madouqu_base_url"' in html
     assert 'id="site_madouqu_mirrors"' in html
     assert 'id="site_madouclub_base_url"' in html
@@ -94,17 +109,28 @@ def test_render_config_ui_html_contains_expected_controls():
 def test_config_ui_run_state_tracks_lifecycle():
     state = ConfigUiRunState()
 
-    assert state.start("scrape") is True
+    assert state.start("scrape", total=3) is True
     assert state.start("scrape") is False
     snapshot = state.snapshot()
     assert snapshot["running"] is True
     assert snapshot["mode"] == "scrape"
+    assert snapshot["queue_total"] == 3
+    assert snapshot["activity_log"]
+
+    state.update({"event": "candidate_try", "crawler": "madouqu", "candidate": "MD-001"})
+    state.update({"event": "candidate_miss", "crawler": "madouqu", "candidate": "MD-001", "error_type": "SearchError"})
+    state.update({"event": "video_succeeded", "video_path": "/videos/MD001.mp4", "number": "MD-001", "title": "示例标题", "source": "madouqu"})
 
     state.finish("scrape", {"scanned": 3, "succeeded": 2, "failed": 1, "skipped": 0})
     finished = state.snapshot()
     assert finished["running"] is False
     assert finished["last_stats"]["succeeded"] == 2
     assert finished["message"] == "Scrape finished"
+    assert finished["current_crawler"] == "madouqu"
+    assert finished["current_candidate"] == "MD-001"
+    assert any("Checking madouqu for MD-001" in line for line in finished["activity_log"])
+    assert any("Miss on madouqu for MD-001" in line for line in finished["activity_log"])
+    assert any("Matched madouqu" in line for line in finished["activity_log"])
 
 
 def test_validate_path_settings_reports_ready_paths(tmp_path: Path):
@@ -149,6 +175,26 @@ def test_pick_directory_uses_macos_picker(monkeypatch):
     assert selected == "/Users/demo/Movies"
     assert calls
     assert calls[0][0] == "osascript"
+
+
+def test_pick_directory_macos_ignores_missing_default_location(monkeypatch):
+    calls: list[list[str]] = []
+
+    class Result:
+        stdout = "/Users/demo/Movies\n"
+
+    def fake_run(command, check, capture_output, text):
+        calls.append(command)
+        return Result()
+
+    monkeypatch.setattr("mdcn.app.config_ui.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("mdcn.app.config_ui.subprocess.run", fake_run)
+
+    selected = pick_directory("/path/to/failed")
+
+    assert selected == "/Users/demo/Movies"
+    assert calls
+    assert "default location" not in " ".join(calls[0])
 
 
 def test_pick_directory_returns_none_when_picker_is_cancelled(monkeypatch):
