@@ -26,16 +26,20 @@ class ResourcePipeline:
             for index, image in enumerate(result.images[: self.max_images], start=1):
                 filename = build_image_filename(result.number or result.title, image.kind, index=index, url=image.url)
                 destination = target_dir / filename
-                async def do_download() -> object:
-                    response = await client.get(image.url)
-                    response.raise_for_status()
-                    return response
+                try:
+                    async def do_download() -> object:
+                        response = await client.get(image.url, follow_redirects=True)
+                        response.raise_for_status()
+                        return response
 
-                response = await run_with_retries(
-                    do_download,
-                    retries=self.retries,
-                    delay_seconds=0.4,
-                )
+                    response = await run_with_retries(
+                        do_download,
+                        retries=self.retries,
+                        delay_seconds=0.4,
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
+
                 destination.write_bytes(response.content)
                 image.local_path = destination
         return result

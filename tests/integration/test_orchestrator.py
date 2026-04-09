@@ -7,13 +7,25 @@ import pytest
 from mdcn.config.models import AppConfig, NetworkConfig, OutputConfig, PathsConfig, ScannerConfig, SiteConfig
 from mdcn.crawlers.base import BaseCrawler
 from mdcn.crawlers.registry import CrawlerRegistry
+from mdcn.domain.errors import SearchError
+from mdcn.domain.enums import FailureReason
 from mdcn.domain.models import MetadataResult, NumberCandidate
 from mdcn.pipeline.metadata import MetadataPipeline
 from mdcn.pipeline.orchestrator import ScrapeOrchestrator
 from mdcn.pipeline.organizer import FileOrganizer
 from mdcn.pipeline.resources import ResourcePipeline
 from mdcn.pipeline.writer import OutputWriter
+from mdcn.scanner.files import build_video_file
 from mdcn.storage.task_repo import TaskRepository
+
+
+def _ordered_site_names(attempts: list[str]) -> list[str]:
+    ordered: list[str] = []
+    for item in attempts:
+        name = item.split(":")[0]
+        if name not in ordered:
+            ordered.append(name)
+    return ordered
 
 
 class FakeCrawler(BaseCrawler):
@@ -33,6 +45,34 @@ class FakeCrawler(BaseCrawler):
 
     async def parse(self, html: str, url: str, candidate: NumberCandidate, *, file_hint: str = "") -> MetadataResult:
         return MetadataResult(number=candidate.normalized, title="示例标题", studio="Madou")
+
+
+class CountingCrawler(BaseCrawler):
+    def __init__(self, name: str, *, should_succeed: bool, attempts: list[str]) -> None:
+        super().__init__(base_url="https://example.com")
+        self._name = name
+        self.should_succeed = should_succeed
+        self.attempts = attempts
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def default_base_url(self) -> str:
+        return "https://example.com"
+
+    async def _search(self, candidate: NumberCandidate, *, file_hint: str = "") -> str:
+        self.attempts.append(f"{self._name}:{candidate.normalized}")
+        if not self.should_succeed:
+            raise SearchError(f"{self._name} miss")
+        return "https://example.com/detail"
+
+    async def fetch(self, url: str) -> str:
+        return "<html></html>"
+
+    async def parse(self, html: str, url: str, candidate: NumberCandidate, *, file_hint: str = "") -> MetadataResult:
+        return MetadataResult(number=candidate.normalized, title=f"{self._name} 标题", studio=self._name)
 
 
 @pytest.mark.asyncio
@@ -109,3 +149,100 @@ async def test_orchestrator_retries_failed_tasks(tmp_path: Path):
     assert stats.succeeded == 1
     assert task_repo.was_processed(str(video_path)) is True
     assert (target_root / "MD-002 示例标题" / "MD002.mp4").exists()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_tries_all_enabled_sites_before_failure(tmp_path: Path):
+    source_dir = tmp_path / "failed"
+    target_root = tmp_path / "library"
+    source_dir.mkdir()
+    target_root.mkdir()
+    video_path = source_dir / "MD010.mp4"
+    video_path.write_bytes(b"video")
+
+    attempts: list[str] = []
+    config = AppConfig(
+        paths=PathsConfig(source_dir=source_dir, target_root=target_root),
+        output=OutputConfig(write_nfo=False, write_json=False),
+        network=NetworkConfig(),
+        scanner=ScannerConfig(extensions=(".mp4",)),
+        sites={
+            "avjia": SiteConfig(enabled=True, base_url="https://example.com"),
+            "madouclub": SiteConfig(enabled=True, base_url="https://example.com"),
+            "madouqu": SiteConfig(enabled=True, base_url="https://example.com"),
+            "mdtv": SiteConfig(enabled=True, base_url="https://example.com"),
+        },
+    )
+
+    orchestrator = ScrapeOrchestrator(
+        config=config,
+        registry=CrawlerRegistry(
+            [
+                CountingCrawler("avjia", should_succeed=False, attempts=attempts),
+                CountingCrawler("madouclub", should_succeed=False, attempts=attempts),
+                CountingCrawler("madouqu", should_succeed=False, attempts=attempts),
+                CountingCrawler("mdtv", should_succeed=False, attempts=attempts),
+            ]
+        ),
+        metadata_pipeline=MetadataPipeline(),
+        resource_pipeline=ResourcePipeline(max_images=0),
+        writer=OutputWriter(),
+        organizer=FileOrganizer(folder_template=config.output.folder_template),
+        task_repo=TaskRepository(target_root / ".mdcn" / "tasks.db"),
+    )
+
+    outcome = await orchestrator.process_video(build_video_file(video_path))
+
+    assert outcome == "failed"
+    assert _ordered_site_names(attempts) == ["avjia", "madouclub", "madouqu", "mdtv"]
+    task = orchestrator.task_repo.get_task(str(video_path))
+    assert task is not None
+    assert task["reason"] == FailureReason.NO_MATCH.value
+    assert "attempts=avjia:MD-010:SearchError" in task["detail"]
+    assert "madouclub:MD-010:SearchError" in task["detail"]
+    assert "madouqu:MD-010:SearchError" in task["detail"]
+    assert "mdtv:MD-010:SearchError" in task["detail"]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_stops_after_first_successful_site(tmp_path: Path):
+    source_dir = tmp_path / "failed"
+    target_root = tmp_path / "library"
+    source_dir.mkdir()
+    target_root.mkdir()
+    video_path = source_dir / "MD011.mp4"
+    video_path.write_bytes(b"video")
+
+    attempts: list[str] = []
+    config = AppConfig(
+        paths=PathsConfig(source_dir=source_dir, target_root=target_root),
+        output=OutputConfig(write_nfo=False, write_json=False),
+        network=NetworkConfig(),
+        scanner=ScannerConfig(extensions=(".mp4",)),
+        sites={
+            "avjia": SiteConfig(enabled=True, base_url="https://example.com"),
+            "madouclub": SiteConfig(enabled=True, base_url="https://example.com"),
+            "madouqu": SiteConfig(enabled=True, base_url="https://example.com"),
+        },
+    )
+
+    orchestrator = ScrapeOrchestrator(
+        config=config,
+        registry=CrawlerRegistry(
+            [
+                CountingCrawler("avjia", should_succeed=False, attempts=attempts),
+                CountingCrawler("madouclub", should_succeed=True, attempts=attempts),
+                CountingCrawler("madouqu", should_succeed=False, attempts=attempts),
+            ]
+        ),
+        metadata_pipeline=MetadataPipeline(),
+        resource_pipeline=ResourcePipeline(max_images=0),
+        writer=OutputWriter(),
+        organizer=FileOrganizer(folder_template=config.output.folder_template),
+        task_repo=TaskRepository(target_root / ".mdcn" / "tasks.db"),
+    )
+
+    outcome = await orchestrator.process_video(build_video_file(video_path))
+
+    assert outcome == "succeeded"
+    assert _ordered_site_names(attempts) == ["avjia", "madouclub"]

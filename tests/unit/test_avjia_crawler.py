@@ -71,3 +71,10 @@ async def test_avjia_search_raises_when_no_match():
         crawler = AvJiaCrawler(client=client)
         with pytest.raises(SearchError):
             await crawler.run(NumberCandidate(raw="91CM017", normalized="91CM017"))
+
+
+def test_avjia_matcher_recognizes_number_inside_longer_title():
+    crawler = AvJiaCrawler()
+
+    assert crawler._matches_expected_number("91KCM-045", "国足雄起之鸡不可失 -RONA 91KCM045")
+    assert crawler._matches_expected_number("91KCM045", "91KCM045 国足雄起之鸡不可失 RONA")

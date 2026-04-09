@@ -26,7 +26,7 @@ class AvJiaCrawler(BaseCrawler):
 
     @property
     def default_base_url(self) -> str:
-        return "https://avjia.net"
+        return "https://1024kan.com"
 
     async def _search(self, candidate: NumberCandidate, *, file_hint: str = "") -> str:
         queries = self._build_queries(candidate.normalized, file_hint)
@@ -35,13 +35,20 @@ class AvJiaCrawler(BaseCrawler):
 
         client = await self.ensure_client()
         for query in queries:
-            try:
-                response = await client.get(f"{self.base_url}/?s={quote(query)}", follow_redirects=True)
-                response.raise_for_status()
-            except httpx.HTTPError:
-                continue
-            if detail_url := self._parse_search_page(response.text, candidate.normalized):
-                return detail_url
+            for request_path, request_params in self._build_search_requests(query):
+                try:
+                    response = await client.get(
+                        urljoin(self.base_url.rstrip("/") + "/", request_path.lstrip("/")),
+                        params=request_params,
+                        follow_redirects=True,
+                    )
+                    response.raise_for_status()
+                except httpx.HTTPError:
+                    continue
+                if detail_url := self._parse_search_page(response.text, candidate.normalized):
+                    return detail_url
+                if detail_url := await self._resolve_detail_from_candidates(response.text, candidate.normalized):
+                    return detail_url
         raise SearchError(f"avjia did not find a match for {candidate.normalized}")
 
     async def parse(
@@ -68,7 +75,7 @@ class AvJiaCrawler(BaseCrawler):
         release_date, year = self._extract_release(selector)
         images = self._collect_images(selector, url)
 
-        cleaned_title = title.replace(number, "", 1).strip(" -") if title.upper().startswith(number.upper()) else title
+        cleaned_title = self._strip_number_prefix(title, number)
         return MetadataResult(
             number=number,
             title=cleaned_title or title,
@@ -95,24 +102,79 @@ class AvJiaCrawler(BaseCrawler):
                 queries.append(value)
         return queries
 
+    def _build_search_requests(self, query: str) -> list[tuple[str, dict[str, str]]]:
+        return [
+            ("/search.php", {"content": query, "type": "1"}),
+            ("/", {"s": query}),
+        ]
+
     def _parse_search_page(self, html: str, expected_number: str) -> str | None:
         selector = Selector(text=html)
-        for node in selector.css("article h2 a, .entry-title a, .post-title a, .video-item a"):
-            href = node.attrib.get("href")
-            title = _clean_text(node.css("::text").get("") or node.attrib.get("title", ""))
-            if href and self._matches_expected_number(expected_number, title):
+        for href, title in self._iter_search_results(selector):
+            if title and self._matches_expected_number(expected_number, title):
                 return urljoin(self.base_url, href)
         return None
 
+    async def _resolve_detail_from_candidates(self, html: str, expected_number: str) -> str | None:
+        selector = Selector(text=html)
+        client = await self.ensure_client()
+        for href, _title in self._iter_search_results(selector, limit=12):
+            detail_url = urljoin(self.base_url, href)
+            try:
+                response = await client.get(detail_url, follow_redirects=True)
+                response.raise_for_status()
+            except httpx.HTTPError:
+                continue
+            detail_selector = Selector(text=response.text)
+            title = self._extract_title(detail_selector)
+            detail_number = self._extract_number(title) or self._extract_number(detail_url)
+            if detail_number and self._matches_expected_number(expected_number, detail_number):
+                return detail_url
+        return None
+
+    def _iter_search_results(self, selector: Selector, *, limit: int | None = None) -> list[tuple[str, str]]:
+        results: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for link in selector.css(
+            ".xx-thumb, .xx-filmtxt h5 a, article h2 a, .entry-title a, .post-title a, .video-item a"
+        ):
+            href = link.attrib.get("href")
+            if not href or href in seen:
+                continue
+            seen.add(href)
+            results.append((href, self._extract_search_title(link)))
+            if limit is not None and len(results) >= limit:
+                break
+        return results
+
+    def _extract_search_title(self, link) -> str:
+        text_candidates = [
+            link.attrib.get("title", ""),
+            link.attrib.get("alt", ""),
+            _clean_text(" ".join(link.css("::text").getall())),
+            _clean_text(" ".join(link.css("img::attr(alt)").getall())),
+        ]
+        for value in text_candidates:
+            value = _clean_text(value)
+            if value:
+                return value
+        return ""
+
     def _extract_title(self, selector: Selector) -> str:
-        for css in ("h1.entry-title::text", "h1.post-title::text", "h1::text", "title::text"):
+        for css in ("h1.entry-title::text", "h1.post-title::text", ".xx-info-box h1::text", "h1::text", "title::text"):
             value = _clean_text(selector.css(css).get(""))
             if value and "404" not in value.lower() and "搜索结果" not in value:
                 return value
         return ""
 
     def _extract_outline(self, selector: Selector) -> str:
-        for css in (".entry-content p::text", ".post-content p::text", ".video-content p::text", ".desc::text"):
+        for css in (
+            ".xx-video-desc::text",
+            ".entry-content p::text",
+            ".post-content p::text",
+            ".video-content p::text",
+            ".desc::text",
+        ):
             values = [_clean_text(item) for item in selector.css(css).getall() if _clean_text(item)]
             if values:
                 return "\n".join(values[:3])
@@ -139,7 +201,13 @@ class AvJiaCrawler(BaseCrawler):
         return []
 
     def _extract_studio(self, selector: Selector) -> str:
-        for css in (".studio::text", ".maker::text", ".company::text", ".producer::text"):
+        for css in (
+            ".xx-info-meta a::text",
+            ".studio::text",
+            ".maker::text",
+            ".company::text",
+            ".producer::text",
+        ):
             value = _clean_text(selector.css(css).get(""))
             if value:
                 return value
@@ -161,6 +229,12 @@ class AvJiaCrawler(BaseCrawler):
     def _collect_images(self, selector: Selector, detail_url: str) -> list[ImageAsset]:
         images: list[ImageAsset] = []
         seen: set[str] = set()
+        for src in selector.css("meta[property='og:image']::attr(content), meta[name='twitter:image']::attr(content)").getall():
+            full_url = urljoin(detail_url, src)
+            if full_url in seen or not self._looks_like_media_image(full_url):
+                continue
+            seen.add(full_url)
+            images.append(ImageAsset(url=full_url, kind="poster"))
         for image in selector.css(".poster img, .entry-content img, .gallery img, .post-content img, img"):
             src = image.attrib.get("data-src") or image.attrib.get("data-original") or image.attrib.get("src") or ""
             if not src:
@@ -190,14 +264,32 @@ class AvJiaCrawler(BaseCrawler):
             return ""
         return f"{match.group(1)}-{match.group(2).zfill(max(3, len(match.group(2))))}"
 
+    def _strip_number_prefix(self, title: str, number: str) -> str:
+        title_clean = _clean_text(title)
+        candidates = {
+            number.upper(),
+            number.replace("-", "").upper(),
+        }
+        for token in candidates:
+            if title_clean.upper().startswith(token):
+                return title_clean[len(token):].strip(" -_[]【】")
+        return title_clean
+
     def _matches_expected_number(self, expected: str, actual_text: str) -> bool:
         return bool(self._normalize_tokens(expected) & self._normalize_tokens(actual_text))
 
     def _normalize_tokens(self, value: str) -> set[str]:
+        tokens: set[str] = set()
+        raw_parts = [part.upper() for part in re.split(r"[^0-9A-Za-z]+", value) if part]
         compact = re.sub(r"[^0-9A-Za-z]", "", value).upper()
-        if not compact:
-            return set()
-        tokens = {compact}
-        if match := re.match(r"([A-Z0-9]*?[A-Z][A-Z0-9]*?)(\d+)$", compact):
-            tokens.add(f"{match.group(1)}{match.group(2).lstrip('0') or '0'}")
+        if compact:
+            raw_parts.append(compact)
+
+        for part in raw_parts:
+            tokens.add(part)
+            for match in re.finditer(r"([A-Z0-9]*?[A-Z][A-Z0-9]*?)(\d{2,5})", part):
+                prefix, digits = match.groups()
+                tokens.add(f"{prefix}{digits}")
+                tokens.add(f"{prefix}{digits.lstrip('0') or '0'}")
+                tokens.add(f"{prefix}-{digits.zfill(max(3, len(digits)))}")
         return tokens

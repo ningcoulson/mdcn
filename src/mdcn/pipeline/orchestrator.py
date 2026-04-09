@@ -84,6 +84,8 @@ class ScrapeOrchestrator:
             self.task_repo.mark_failure(video_path, reason=FailureReason.NO_CANDIDATE.value)
             return "failed"
 
+        attempts: list[str] = []
+        last_error: Exception | None = None
         for crawler in self.registry.get_enabled(self.config.sites, self.config.priority.site_order):
             for candidate in candidates:
                 try:
@@ -92,12 +94,13 @@ class ScrapeOrchestrator:
                     return "succeeded"
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc
+                    attempts.append(f"{crawler.name}:{candidate.normalized}:{type(exc).__name__}")
                     continue
 
         self.task_repo.mark_failure(
             video_path,
             reason=FailureReason.NO_MATCH.value,
-            detail=str(last_error) if "last_error" in locals() else "",
+            detail=self._build_failure_detail(attempts, last_error),
         )
         return "failed"
 
@@ -121,3 +124,11 @@ class ScrapeOrchestrator:
             number=normalized.number or candidate.normalized,
             target_dir=str(target_dir),
         )
+
+    def _build_failure_detail(self, attempts: list[str], last_error: Exception | None) -> str:
+        parts: list[str] = []
+        if attempts:
+            parts.append("attempts=" + ", ".join(attempts))
+        if last_error is not None:
+            parts.append(f"last_error={last_error}")
+        return " | ".join(parts)
