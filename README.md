@@ -93,26 +93,49 @@ scripts/
 
 ## One-Click Quick Start / 一键快速启动
 
+The easiest entry is now in the project root.
+最简单的入口现在就在项目根目录。
+
+If you are helping a beginner user, tell them to open the project folder and double-click the start file.
+如果是给小白用户使用，直接让对方打开项目文件夹后双击启动文件即可。
+
 ### macOS / Linux
+
+Double-click from the project root on macOS:
+macOS 下直接在项目根目录双击：
+
+```text
+start.command
+```
+
+Or run:
+或者执行：
+
+```bash
+./start.sh
+```
+
+Legacy script location:
+旧入口仍然保留：
 
 ```bash
 ./scripts/quickstart.sh
 ```
 
-On macOS you can also double-click:
-在 macOS 上也可以直接双击：
-
-```text
-scripts/quickstart.command
-```
-
 ### Windows
 
-Double-click or run:
-双击或执行：
+Double-click from the project root:
+在项目根目录直接双击：
+
+```text
+start.bat
+```
+
+Or run:
+或者执行：
 
 ```bat
-scripts\quickstart.bat
+start.bat
 ```
 
 What the quick start script does / 一键脚本会做什么：
@@ -125,6 +148,8 @@ What the quick start script does / 一键脚本会做什么：
    如果缺少 `config.toml`，自动从 `config.example.toml` 复制。
 4. Launch the local HTML config UI.
    启动本地 HTML 配置页。
+5. Open the browser automatically.
+   自动打开浏览器页面。
 
 ## Manual Setup / 手动安装
 

@@ -16,10 +16,16 @@ Version `0.0.1` is the first usable CLI-oriented build.
 
 ### Fastest Start
 
-If you want the shortest path and are on macOS or Linux:
+If you want the shortest path:
+
+- macOS: double-click `start.command` in the project folder
+- Windows: double-click `start.bat` in the project folder
+- Linux/macOS terminal: run `./start.sh`
+
+If you prefer the terminal command directly and are on macOS or Linux:
 
 ```bash
-./scripts/quickstart.sh
+./start.sh
 ```
 
 This will:
@@ -28,6 +34,7 @@ This will:
 - install `mdcn`
 - create `config.toml` if missing
 - launch the local HTML config UI
+- open the browser automatically
 
 ### 1. Create and activate a virtual environment
 
