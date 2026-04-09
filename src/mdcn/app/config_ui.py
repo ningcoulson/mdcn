@@ -312,6 +312,11 @@ def build_config_from_ui_payload(payload: dict[str, Any]):
                 "base_url": str(payload.get("site_avjia_base_url", "")).strip(),
                 "mirrors": [item.strip() for item in str(payload.get("site_avjia_mirrors", "")).split(",") if item.strip()],
             },
+            "tianmei": {
+                "enabled": bool(payload.get("site_tianmei_enabled", True)),
+                "base_url": str(payload.get("site_tianmei_base_url", "")).strip(),
+                "mirrors": [item.strip() for item in str(payload.get("site_tianmei_mirrors", "")).split(",") if item.strip()],
+            },
         },
     }
     return build_config_from_dict(clean)
@@ -737,7 +742,7 @@ def render_config_ui_html() -> str:
           <div class="grid">
             <div class="field full">
               <label for="site_order">站点优先顺序</label>
-              <input id="site_order" name="site_order" placeholder="madouqu, mdtv, madouclub, avjia" />
+              <input id="site_order" name="site_order" placeholder="avjia, tianmei, madouclub, madouqu, mdtv" />
               <div class="hint">按逗号分隔。刮削时会优先尝试前面的站点。</div>
             </div>
             <div class="field full">
@@ -761,12 +766,19 @@ def render_config_ui_html() -> str:
               <input id="site_avjia_base_url" name="site_avjia_base_url" />
               <input id="site_avjia_mirrors" name="site_avjia_mirrors" placeholder="https://mirror1.example, https://mirror2.example" />
             </div>
+            <div class="field full">
+              <label for="site_tianmei_base_url">Tianmei 地址</label>
+              <input id="site_tianmei_base_url" name="site_tianmei_base_url" />
+              <div class="hint">适合 91 制片厂、天美、蜜桃、精东等国产站点元数据回查。</div>
+              <input id="site_tianmei_mirrors" name="site_tianmei_mirrors" placeholder="https://www.wyxk.cc, https://www.xbyc.cc" />
+            </div>
           </div>
           <div class="checks">
             <label class="check"><input id="site_madouqu_enabled" name="site_madouqu_enabled" type="checkbox" /> 启用 MadouQu</label>
             <label class="check"><input id="site_mdtv_enabled" name="site_mdtv_enabled" type="checkbox" /> 启用 MadouTV</label>
             <label class="check"><input id="site_madouclub_enabled" name="site_madouclub_enabled" type="checkbox" /> 启用 MadouClub</label>
             <label class="check"><input id="site_avjia_enabled" name="site_avjia_enabled" type="checkbox" /> 启用 AvJia</label>
+            <label class="check"><input id="site_tianmei_enabled" name="site_tianmei_enabled" type="checkbox" /> 启用 Tianmei</label>
           </div>
         </section>
 
@@ -819,10 +831,11 @@ def render_config_ui_html() -> str:
       "site_madouqu_base_url", "site_madouqu_mirrors",
       "site_mdtv_base_url", "site_mdtv_mirrors",
       "site_madouclub_base_url", "site_madouclub_mirrors",
-      "site_avjia_base_url", "site_avjia_mirrors"
+      "site_avjia_base_url", "site_avjia_mirrors",
+      "site_tianmei_base_url", "site_tianmei_mirrors"
     ];
     const checks = [
-      "write_nfo", "write_json", "site_madouqu_enabled", "site_mdtv_enabled", "site_madouclub_enabled", "site_avjia_enabled"
+      "write_nfo", "write_json", "site_madouqu_enabled", "site_mdtv_enabled", "site_madouclub_enabled", "site_avjia_enabled", "site_tianmei_enabled"
     ];
 
     const form = document.getElementById("configForm");
@@ -1001,6 +1014,7 @@ def render_config_ui_html() -> str:
       document.getElementById("site_mdtv_enabled").checked = Boolean(data.sites.mdtv?.enabled);
       document.getElementById("site_madouclub_enabled").checked = Boolean(data.sites.madouclub?.enabled);
       document.getElementById("site_avjia_enabled").checked = Boolean(data.sites.avjia?.enabled);
+      document.getElementById("site_tianmei_enabled").checked = Boolean(data.sites.tianmei?.enabled);
       document.getElementById("site_madouqu_base_url").value = data.sites.madouqu?.base_url ?? "";
       document.getElementById("site_madouqu_mirrors").value = (data.sites.madouqu?.mirrors ?? []).join(", ");
       document.getElementById("site_mdtv_base_url").value = data.sites.mdtv?.base_url ?? "";
@@ -1009,6 +1023,8 @@ def render_config_ui_html() -> str:
       document.getElementById("site_madouclub_mirrors").value = (data.sites.madouclub?.mirrors ?? []).join(", ");
       document.getElementById("site_avjia_base_url").value = data.sites.avjia?.base_url ?? "";
       document.getElementById("site_avjia_mirrors").value = (data.sites.avjia?.mirrors ?? []).join(", ");
+      document.getElementById("site_tianmei_base_url").value = data.sites.tianmei?.base_url ?? "";
+      document.getElementById("site_tianmei_mirrors").value = (data.sites.tianmei?.mirrors ?? []).join(", ");
       await refreshPreview();
       await loadRunStatus();
       await loadTasks();

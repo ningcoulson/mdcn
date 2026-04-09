@@ -45,6 +45,7 @@ It is designed for local library workflows such as Emby, Jellyfin, and Kodi.
 | MadouTV | `mdtv` | Stable | Search + detail parse + images |
 | MadouClub | `madouclub` | Available | Search + detail parse + images |
 | AvJia | `avjia` | Available | Search + detail parse + images |
+| Tianmei | `tianmei` | Available | Good fallback for 91制片厂 / 天美 / 蜜桃 / 精东 family pages |
 
 中文说明：
 
@@ -196,11 +197,15 @@ root = "/path/to/library"
 folder_template = "{studio}/{number} {title}"
 
 [priority]
-site_order = ["madouqu", "mdtv", "madouclub", "avjia"]
+site_order = ["avjia", "tianmei", "madouclub", "madouqu", "mdtv"]
 
 [sites.avjia]
 base_url = "https://avjia.net"
 mirrors = ["https://mirror.avjia.net"]
+
+[sites.tianmei]
+base_url = "https://www.94mt.cc"
+mirrors = ["https://www.wyxk.cc", "https://www.xbyc.cc"]
 ```
 
 Useful naming placeholders / 可用命名占位符：

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from mdcn.config.models import AppConfig
-from mdcn.crawlers import AvJiaCrawler, CrawlerRegistry, MadouClubCrawler, MadouQuCrawler
+from mdcn.crawlers import AvJiaCrawler, CrawlerRegistry, MadouClubCrawler, MadouQuCrawler, TianmeiCrawler
 from mdcn.crawlers.mdtv import MadouTVCrawler
 from mdcn.pipeline import FileOrganizer, MetadataPipeline, OutputWriter
 from mdcn.pipeline.orchestrator import ScrapeOrchestrator
@@ -52,6 +52,17 @@ def build_crawlers(config: AppConfig) -> list[object]:
         site = config.sites.get("avjia")
         crawlers.append(
             AvJiaCrawler(
+                base_url=site.base_url if site else None,
+                mirrors=site.mirrors if site else (),
+                proxy=config.network.proxy,
+                timeout=config.network.timeout,
+                retries=config.network.retries,
+            )
+        )
+    if config.sites.get("tianmei", None) is None or config.sites["tianmei"].enabled:
+        site = config.sites.get("tianmei")
+        crawlers.append(
+            TianmeiCrawler(
                 base_url=site.base_url if site else None,
                 mirrors=site.mirrors if site else (),
                 proxy=config.network.proxy,

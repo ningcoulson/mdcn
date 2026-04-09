@@ -10,7 +10,7 @@ def test_build_config_from_ui_payload_maps_fields():
         "folder_template": "{number} {title}",
         "max_images": 5,
         "extensions": ".mp4, .mkv, .ts",
-        "site_order": "mdtv, madouqu",
+        "site_order": "avjia, tianmei, madouqu",
         "proxy": "http://127.0.0.1:7890",
         "timeout": 25,
         "retries": 4,
@@ -28,6 +28,9 @@ def test_build_config_from_ui_payload_maps_fields():
         "site_avjia_enabled": True,
         "site_avjia_base_url": "https://avjia.net",
         "site_avjia_mirrors": "https://avjia-mirror.example",
+        "site_tianmei_enabled": True,
+        "site_tianmei_base_url": "https://www.94mt.cc",
+        "site_tianmei_mirrors": "https://www.wyxk.cc, https://www.xbyc.cc",
     }
 
     config = build_config_from_ui_payload(payload)
@@ -37,12 +40,14 @@ def test_build_config_from_ui_payload_maps_fields():
     assert config.output.max_images == 5
     assert config.output.write_json is False
     assert config.scanner.extensions == (".mp4", ".mkv", ".ts")
-    assert config.priority.site_order == ("mdtv", "madouqu")
+    assert config.priority.site_order == ("avjia", "tianmei", "madouqu")
     assert config.sites["mdtv"].enabled is False
     assert config.sites["madouclub"].base_url == "https://madou.club"
     assert config.sites["avjia"].base_url == "https://avjia.net"
+    assert config.sites["tianmei"].base_url == "https://www.94mt.cc"
     assert config.sites["madouqu"].mirrors == ("https://mq1.example", "https://mq2.example")
     assert config.sites["avjia"].mirrors == ("https://avjia-mirror.example",)
+    assert config.sites["tianmei"].mirrors == ("https://www.wyxk.cc", "https://www.xbyc.cc")
 
 
 def test_render_config_ui_html_contains_expected_controls():
@@ -66,6 +71,8 @@ def test_render_config_ui_html_contains_expected_controls():
     assert 'id="site_mdtv_mirrors"' in html
     assert 'id="site_avjia_base_url"' in html
     assert 'id="site_avjia_mirrors"' in html
+    assert 'id="site_tianmei_base_url"' in html
+    assert 'id="site_tianmei_mirrors"' in html
 
 
 def test_config_ui_run_state_tracks_lifecycle():

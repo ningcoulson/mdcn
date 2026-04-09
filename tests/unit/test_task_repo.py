@@ -28,3 +28,17 @@ def test_task_repo_tracks_success_and_failure(tmp_path: Path):
     assert len(query_result) == 1
     assert query_result[0]["video_path"] == "/videos/MD-001.mp4"
     assert repo.get_task("/videos/MD-002.mp4")["status"] == "success"
+
+
+def test_task_repo_clears_failure_detail_when_restarting_task(tmp_path: Path):
+    repo = TaskRepository(tmp_path / "tasks.db")
+
+    repo.start_task("/videos/MD-003.mp4")
+    repo.mark_failure("/videos/MD-003.mp4", reason="no_match", detail="old detail")
+    repo.start_task("/videos/MD-003.mp4")
+
+    task = repo.get_task("/videos/MD-003.mp4")
+    assert task is not None
+    assert task["status"] == "running"
+    assert task["reason"] == ""
+    assert task["detail"] == ""

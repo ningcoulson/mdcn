@@ -19,7 +19,7 @@ retries = 2
 extensions = [".mp4", ".mkv", ".avi", ".ts", ".mov", ".wmv", ".flv", ".m4v", ".webm"]
 
 [priority]
-site_order = ["madouqu", "mdtv", "madouclub", "avjia"]
+site_order = ["avjia", "tianmei", "madouclub", "madouqu", "mdtv"]
 
 [sites.madouqu]
 enabled = true
@@ -40,3 +40,8 @@ mirrors = []
 enabled = true
 base_url = "https://avjia.net"
 mirrors = []
+
+[sites.tianmei]
+enabled = true
+base_url = "https://www.94mt.cc"
+mirrors = ["https://www.wyxk.cc", "https://www.xbyc.cc", "https://www.tianmei.one", "https://www.94hs.cc"]

@@ -46,10 +46,12 @@ class TaskRepository:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO tasks(video_path, status, updated_at)
-                VALUES(?, 'running', CURRENT_TIMESTAMP)
+                INSERT INTO tasks(video_path, status, reason, detail, updated_at)
+                VALUES(?, 'running', '', '', CURRENT_TIMESTAMP)
                 ON CONFLICT(video_path) DO UPDATE SET
                     status = 'running',
+                    reason = '',
+                    detail = '',
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (video_path,),
