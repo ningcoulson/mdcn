@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import threading
 import webbrowser
 from dataclasses import dataclass, field
@@ -188,6 +189,12 @@ def _make_handler(config_path: Path, run_state: ConfigUiRunState):
             if parsed.path == "/api/run-status":
                 self._send_json(run_state.snapshot())
                 return
+            if parsed.path == "/api/validate-paths":
+                query = parse_qs(parsed.query)
+                source_dir = query.get("source_dir", [""])[0]
+                target_root = query.get("target_root", [""])[0]
+                self._send_json(validate_path_settings(source_dir, target_root))
+                return
             if parsed.path == "/api/tasks":
                 query = parse_qs(parsed.query)
                 status = query.get("status", ["all"])[0]
@@ -332,6 +339,54 @@ def _ensure_config_exists(config_path: Path) -> None:
         )
     )
     save_config(default_config, config_path)
+
+
+def validate_path_settings(source_dir: str, target_root: str) -> dict[str, Any]:
+    source_path = Path(source_dir).expanduser() if source_dir.strip() else None
+    target_path = Path(target_root).expanduser() if target_root.strip() else None
+
+    source_ready = False
+    target_ready = False
+    source_message = ""
+    target_message = ""
+
+    if source_path is None:
+        source_message = "请先填写源目录。"
+    elif source_path.exists() and source_path.is_dir():
+        source_ready = True
+        source_message = "源目录存在，可以开始扫描。"
+    elif source_path.exists():
+        source_message = "源目录存在，但它不是文件夹。"
+    else:
+        source_message = "源目录不存在，请检查路径。"
+
+    if target_path is None:
+        target_message = "请先填写目标目录。"
+    elif target_path.exists() and target_path.is_dir():
+        if os.access(target_path, os.W_OK):
+            target_ready = True
+            target_message = "目标目录存在，且当前可写。"
+        else:
+            target_message = "目标目录存在，但当前没有写入权限。"
+    elif target_path.exists():
+        target_message = "目标目录存在，但它不是文件夹。"
+    else:
+        parent = target_path.parent
+        while parent != parent.parent and not parent.exists():
+            parent = parent.parent
+        if parent.exists() and parent.is_dir() and os.access(parent, os.W_OK):
+            target_ready = True
+            target_message = f"目标目录尚不存在，但可以在 {parent} 下创建。"
+        else:
+            target_message = "目标目录不存在，且父目录不可写或无效。"
+
+    return {
+        "source_ready": source_ready,
+        "target_ready": target_ready,
+        "can_run": source_ready and target_ready,
+        "source_message": source_message,
+        "target_message": target_message,
+    }
 
 
 def render_config_ui_html() -> str:
@@ -568,6 +623,20 @@ def render_config_ui_html() -> str:
       font-size: 13px;
       line-height: 1.5;
     }
+    .path-status {
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(36, 75, 69, 0.08);
+      color: var(--accent-2);
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-line;
+    }
+    .path-status.warn {
+      background: rgba(181, 71, 47, 0.08);
+      color: var(--accent);
+    }
     .preview {
       margin-top: 12px;
       padding: 12px 14px;
@@ -730,6 +799,7 @@ def render_config_ui_html() -> str:
               <input id="target_root" name="target_root" placeholder="/path/to/library" />
             </div>
           </div>
+          <div class="path-status" id="pathStatusText">正在检测目录状态...</div>
         </section>
 
         <section class="section">
@@ -880,6 +950,7 @@ def render_config_ui_html() -> str:
     const configPathBadge = document.getElementById("configPathBadge");
     const welcomeNotice = document.getElementById("welcomeNotice");
     const welcomeAlert = document.getElementById("welcomeAlert");
+    const pathStatusText = document.getElementById("pathStatusText");
     const previewText = document.getElementById("previewText");
     const runStatusText = document.getElementById("runStatusText");
     const taskSummaryText = document.getElementById("taskSummaryText");
@@ -929,6 +1000,22 @@ def render_config_ui_html() -> str:
         welcomeAlert.textContent = "首次启动时，请先把默认示例路径改成你自己的真实目录。";
         welcomeAlert.style.color = "var(--accent)";
       }
+    }
+
+    async function validatePaths() {
+      const sourceDir = document.getElementById("source_dir").value || "";
+      const targetRoot = document.getElementById("target_root").value || "";
+      const response = await fetch(
+        `/api/validate-paths?source_dir=${encodeURIComponent(sourceDir)}&target_root=${encodeURIComponent(targetRoot)}`
+      );
+      const data = await response.json();
+      const lines = [
+        `源目录: ${data.source_message || "-"}`,
+        `目标目录: ${data.target_message || "-"}`,
+      ];
+      pathStatusText.textContent = lines.join("\\n");
+      pathStatusText.className = data.can_run ? "path-status" : "path-status warn";
+      return data;
     }
 
     function renderRunStatus(data) {
@@ -1095,6 +1182,7 @@ def render_config_ui_html() -> str:
       document.getElementById("site_tianmei_base_url").value = data.sites.tianmei?.base_url ?? "";
       document.getElementById("site_tianmei_mirrors").value = (data.sites.tianmei?.mirrors ?? []).join(", ");
       updateWelcomeState();
+      await validatePaths();
       await refreshPreview();
       await loadRunStatus();
       await loadTasks();
@@ -1127,6 +1215,12 @@ def render_config_ui_html() -> str:
 
     async function saveAndRun(mode) {
       const payload = collectPayload();
+      const pathValidation = await validatePaths();
+      if (!pathValidation.can_run) {
+        statusText.textContent = "目录检查未通过，请先修正源目录或目标目录。";
+        statusText.className = "status warn";
+        return;
+      }
       payload.mode = mode;
 
       statusText.textContent = mode === "retry_failed" ? "正在保存并启动失败任务重跑..." : "正在保存并启动刮削...";
@@ -1182,8 +1276,8 @@ def render_config_ui_html() -> str:
     taskSearch.addEventListener("input", loadTasks);
     document.getElementById("closeTaskDetailButton").addEventListener("click", () => taskDetailDialog.close());
     document.getElementById("folder_template").addEventListener("input", refreshPreview);
-    document.getElementById("source_dir").addEventListener("input", updateWelcomeState);
-    document.getElementById("target_root").addEventListener("input", updateWelcomeState);
+    document.getElementById("source_dir").addEventListener("input", async () => { updateWelcomeState(); await validatePaths(); });
+    document.getElementById("target_root").addEventListener("input", async () => { updateWelcomeState(); await validatePaths(); });
     form.addEventListener("submit", saveConfig);
     loadConfig();
     setInterval(async () => {

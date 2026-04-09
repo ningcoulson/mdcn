@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from mdcn.app.config_ui import ConfigUiRunState, build_config_from_ui_payload, render_config_ui_html
+from pathlib import Path
+
+from mdcn.app.config_ui import ConfigUiRunState, build_config_from_ui_payload, render_config_ui_html, validate_path_settings
 
 
 def test_build_config_from_ui_payload_maps_fields():
@@ -56,6 +58,7 @@ def test_render_config_ui_html_contains_expected_controls():
     assert "Config Studio" in html
     assert 'id="source_dir"' in html
     assert 'id="target_root"' in html
+    assert 'id="pathStatusText"' in html
     assert 'id="folder_template"' in html
     assert 'id="site_order"' in html
     assert 'id="previewText"' in html
@@ -92,3 +95,27 @@ def test_config_ui_run_state_tracks_lifecycle():
     assert finished["running"] is False
     assert finished["last_stats"]["succeeded"] == 2
     assert finished["message"] == "Scrape finished"
+
+
+def test_validate_path_settings_reports_ready_paths(tmp_path: Path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    target_dir = tmp_path / "library"
+
+    result = validate_path_settings(str(source_dir), str(target_dir))
+
+    assert result["source_ready"] is True
+    assert result["target_ready"] is True
+    assert result["can_run"] is True
+    assert "存在" in result["source_message"]
+    assert "可以在" in result["target_message"]
+
+
+def test_validate_path_settings_reports_missing_source(tmp_path: Path):
+    target_dir = tmp_path / "library"
+
+    result = validate_path_settings(str(tmp_path / "missing"), str(target_dir))
+
+    assert result["source_ready"] is False
+    assert result["can_run"] is False
+    assert "不存在" in result["source_message"]
