@@ -5,6 +5,7 @@ from subprocess import CalledProcessError
 
 from mdcn.app.config_ui import (
     ConfigUiRunState,
+    _open_browser_url,
     build_config_from_ui_payload,
     pick_directory,
     render_config_ui_html,
@@ -160,3 +161,42 @@ def test_pick_directory_returns_none_when_picker_is_cancelled(monkeypatch):
     selected = pick_directory("/Users/demo")
 
     assert selected is None
+
+
+def test_open_browser_url_prefers_macos_open(monkeypatch):
+    calls: list[list[str]] = []
+
+    class Result:
+        returncode = 0
+
+    def fake_run(command, check, capture_output, text):
+        calls.append(command)
+        return Result()
+
+    monkeypatch.setattr("mdcn.app.config_ui.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("mdcn.app.config_ui.subprocess.run", fake_run)
+
+    opened = _open_browser_url("http://127.0.0.1:8765")
+
+    assert opened is True
+    assert calls == [["open", "http://127.0.0.1:8765"]]
+
+
+def test_open_browser_url_falls_back_to_webbrowser(monkeypatch):
+    calls: list[list[str]] = []
+
+    class Result:
+        returncode = 1
+
+    def fake_run(command, check, capture_output, text):
+        calls.append(command)
+        return Result()
+
+    monkeypatch.setattr("mdcn.app.config_ui.platform.system", lambda: "Linux")
+    monkeypatch.setattr("mdcn.app.config_ui.subprocess.run", fake_run)
+    monkeypatch.setattr("mdcn.app.config_ui.webbrowser.open", lambda url, new, autoraise: True)
+
+    opened = _open_browser_url("http://127.0.0.1:8765")
+
+    assert opened is True
+    assert calls == [["xdg-open", "http://127.0.0.1:8765"], ["gio", "open", "http://127.0.0.1:8765"]]

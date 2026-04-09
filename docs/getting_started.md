@@ -22,6 +22,14 @@ If you want the shortest path:
 - Windows: double-click `start.bat` in the project folder
 - Linux/macOS terminal: run `./start.sh`
 
+Notes:
+- The first launch may take 1-3 minutes while mdcn prepares Python and dependencies.
+- If the browser does not open automatically, visit [http://127.0.0.1:8765](http://127.0.0.1:8765) manually.
+
+说明：
+- 第一次启动时，mdcn 可能会花 1 到 3 分钟准备 Python 和依赖。
+- 如果浏览器没有自动打开，请手动访问 [http://127.0.0.1:8765](http://127.0.0.1:8765)。
+
 If you prefer the terminal command directly and are on macOS or Linux:
 
 ```bash
@@ -30,11 +38,12 @@ If you prefer the terminal command directly and are on macOS or Linux:
 
 This will:
 
-- create `.venv`
+- create a reusable virtual environment under your home directory
 - install `mdcn`
 - create `config.toml` if missing
 - launch the local HTML config UI
 - open the browser automatically
+- print the local URL when the browser cannot be opened automatically
 
 ### 1. Create and activate a virtual environment
 

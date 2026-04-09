@@ -155,13 +155,37 @@ def serve_config_ui(
 ) -> ThreadingHTTPServer:
     config_file = Path(config_path)
     server = _build_server(config_file, host, port)
+    url = f"http://{host}:{port}"
     if open_browser:
-        webbrowser.open(f"http://{host}:{port}", new=1, autoraise=True)
+        threading.Timer(1.0, _open_browser_url, args=(url,)).start()
     try:
         server.serve_forever()
     finally:
         server.server_close()
     return server
+
+
+def _open_browser_url(url: str) -> bool:
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            completed = subprocess.run(["open", url], check=False, capture_output=True, text=True)
+            if completed.returncode == 0:
+                return True
+        elif system == "Windows":
+            os.startfile(url)  # type: ignore[attr-defined]
+            return True
+        else:
+            for command in (["xdg-open", url], ["gio", "open", url]):
+                completed = subprocess.run(command, check=False, capture_output=True, text=True)
+                if completed.returncode == 0:
+                    return True
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        return webbrowser.open(url, new=1, autoraise=True)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _build_server(config_path: Path, host: str, port: int) -> ThreadingHTTPServer:

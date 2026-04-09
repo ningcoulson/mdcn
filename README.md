@@ -99,6 +99,11 @@ The easiest entry is now in the project root.
 If you are helping a beginner user, tell them to open the project folder and double-click the start file.
 如果是给小白用户使用，直接让对方打开项目文件夹后双击启动文件即可。
 
+The first launch may take 1-3 minutes while mdcn prepares Python and dependencies.
+If the browser does not open automatically, open [http://127.0.0.1:8765](http://127.0.0.1:8765) manually.
+第一次启动时，mdcn 可能会花 1 到 3 分钟准备 Python 和依赖。
+如果浏览器没有自动弹出，请手动打开 [http://127.0.0.1:8765](http://127.0.0.1:8765)。
+
 ### macOS / Linux
 
 Double-click from the project root on macOS:
@@ -141,7 +146,7 @@ start.bat
 What the quick start script does / 一键脚本会做什么：
 
 1. Create `.venv` if it does not exist.
-   如果没有 `.venv` 就自动创建。
+   如果没有虚拟环境就自动创建。
 2. Install the project in editable mode.
    以可编辑模式安装项目。
 3. Create `config.toml` from `config.example.toml` if missing.
@@ -150,6 +155,11 @@ What the quick start script does / 一键脚本会做什么：
    启动本地 HTML 配置页。
 5. Open the browser automatically.
    自动打开浏览器页面。
+6. Print the local URL if automatic opening is blocked.
+   如果自动打开浏览器失败，会打印本地访问地址。
+
+By default, the one-click script stores its virtual environment under your home directory for faster and more reliable startup, especially when the project is on an external drive.
+默认情况下，一键脚本会把虚拟环境放在用户主目录下，这样在项目位于外置硬盘时启动会更快也更稳。
 
 ## Manual Setup / 手动安装
 
