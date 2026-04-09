@@ -7,6 +7,7 @@ from mdcn.app.config_ui import (
     ConfigUiRunState,
     _open_browser_url,
     build_config_from_ui_payload,
+    organize_files_in_directory,
     pick_directory,
     render_config_ui_html,
     validate_path_settings,
@@ -94,7 +95,12 @@ def test_render_config_ui_html_contains_expected_controls():
     assert 'id="currentPosterImage"' in html
     assert 'id="activityLogText"' in html
     assert 'id="recentPosterRail"' in html
-    assert 'id="openSourceDirButton"' in html
+    assert 'id="organizeDirectory"' in html
+    assert 'id="organizeFolderRule"' in html
+    assert 'id="organizeVideoRule"' in html
+    assert 'id="organizePosterRule"' in html
+    assert 'id="previewOrganizeButton"' in html
+    assert 'id="applyOrganizeButton"' in html
     assert 'id="site_madouqu_base_url"' in html
     assert 'id="site_madouqu_mirrors"' in html
     assert 'id="site_madouclub_base_url"' in html
@@ -207,6 +213,32 @@ def test_pick_directory_returns_none_when_picker_is_cancelled(monkeypatch):
     selected = pick_directory("/Users/demo")
 
     assert selected is None
+
+
+def test_organize_files_in_directory_renames_folder_video_and_poster(tmp_path: Path):
+    folder = tmp_path / "bad-folder"
+    folder.mkdir()
+    (folder / "random_name.mp4").write_bytes(b"video")
+    (folder / "poster.jpg").write_bytes(b"poster")
+    (folder / "old.nfo").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?><movie><id>MD-002</id><title>示例标题</title></movie>',
+        encoding="utf-8",
+    )
+
+    result = organize_files_in_directory(
+        base_dir=tmp_path,
+        folder_rule="{number} {title}",
+        video_rule="{number}",
+        poster_rule="{number}_poster.jpg",
+        recursive=True,
+        apply_changes=True,
+    )
+
+    assert result["ok"] is True
+    target = tmp_path / "MD-002 示例标题"
+    assert target.exists()
+    assert (target / "MD-002.mp4").exists()
+    assert (target / "MD-002_poster.jpg").exists()
 
 
 def test_open_browser_url_prefers_macos_open(monkeypatch):

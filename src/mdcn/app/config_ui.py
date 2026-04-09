@@ -7,6 +7,8 @@ import json
 import mimetypes
 import os
 import platform
+import re
+import shutil
 import subprocess
 import threading
 import webbrowser
@@ -17,11 +19,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
+from xml.etree import ElementTree as ET
 
 from mdcn.app.bootstrap import build_orchestrator
 from mdcn.config import AppConfig, PathsConfig, build_config_from_dict, config_to_dict, load_config, save_config
-from mdcn.output.naming import preview_folder_name
+from mdcn.output.naming import build_template_context, preview_folder_name, render_folder_template, sanitize_path_component
 from mdcn.scanner.files import iter_video_files
+from mdcn.scanner.number_parser import extract_candidates, normalize_number
 from mdcn.storage.task_repo import TaskRepository
 
 ASSET_DIR = Path(__file__).parent / "assets"
@@ -328,6 +332,248 @@ def _open_path_in_system(path: str) -> bool:
     return False
 
 
+_VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".ts", ".mov", ".wmv", ".flv", ".m4v", ".webm"}
+_POSTER_CANDIDATE_RE = re.compile(r"(?i)^(poster|.+_poster(?:_\d+)?)\.(jpg|jpeg|png|webp)$")
+
+
+def _iter_leaf_media_folders(base_dir: Path, *, recursive: bool) -> list[tuple[Path, list[Path]]]:
+    if not recursive:
+        videos = [item for item in base_dir.iterdir() if item.is_file() and item.suffix.lower() in _VIDEO_EXTENSIONS]
+        return [(base_dir, videos)] if videos else []
+
+    leaves: list[tuple[Path, list[Path]]] = []
+    for dir_path, dir_names, file_names in os.walk(base_dir):
+        current = Path(dir_path)
+        if current.name == ".mdcn":
+            dir_names[:] = []
+            continue
+        videos = [current / name for name in file_names if Path(name).suffix.lower() in _VIDEO_EXTENSIONS]
+        if videos:
+            leaves.append((current, videos))
+    return leaves
+
+
+def _extract_number_title_from_folder(folder: Path, videos: list[Path]) -> tuple[str, str]:
+    number, title = _extract_from_metadata_json(folder)
+    if not number or not title:
+        nfo_number, nfo_title = _extract_from_nfo(folder)
+        number = number or nfo_number
+        title = title or nfo_title
+
+    if not number or not title:
+        folder_number, folder_title = _extract_from_folder_name(folder.name)
+        number = number or folder_number
+        title = title or folder_title
+
+    if not number:
+        video_number, video_title = _extract_from_video_name(videos)
+        number = number or video_number
+        title = title or video_title
+
+    return normalize_number(number or ""), sanitize_path_component(title or "")
+
+
+def _extract_from_metadata_json(folder: Path) -> tuple[str, str]:
+    metadata_path = folder / "metadata.json"
+    if not metadata_path.exists():
+        return "", ""
+    try:
+        data = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return "", ""
+    number = normalize_number(str(data.get("number") or data.get("id") or ""))
+    title = sanitize_path_component(str(data.get("title") or data.get("originaltitle") or ""))
+    return number, title
+
+
+def _extract_from_nfo(folder: Path) -> tuple[str, str]:
+    for nfo in sorted(folder.glob("*.nfo")):
+        try:
+            root = ET.fromstring(nfo.read_text(encoding="utf-8", errors="ignore"))
+        except Exception:  # noqa: BLE001
+            continue
+        number = normalize_number((root.findtext("id") or root.findtext("num") or root.findtext("sorttitle") or "").strip())
+        title = sanitize_path_component((root.findtext("title") or root.findtext("originaltitle") or "").strip())
+        if number or title:
+            return number, title
+    return "", ""
+
+
+def _extract_from_folder_name(name: str) -> tuple[str, str]:
+    match = re.match(r"(?i)^([A-Za-z0-9]+(?:-[A-Za-z0-9]+)?)\s+(.+)$", name.strip())
+    if not match:
+        return "", ""
+    return normalize_number(match.group(1)), sanitize_path_component(match.group(2))
+
+
+def _extract_from_video_name(videos: list[Path]) -> tuple[str, str]:
+    for video in sorted(videos, key=lambda path: path.stat().st_size, reverse=True):
+        candidates = extract_candidates(video.stem)
+        if not candidates:
+            continue
+        number = candidates[0].normalized
+        title = sanitize_path_component(video.stem.replace(candidates[0].raw, "").strip(" -_[]【】."))
+        return normalize_number(number), title
+    return "", ""
+
+
+def _render_name_rule(rule: str, *, context: dict[str, str], fallback: str) -> str:
+    rendered = render_folder_template(rule.strip() or fallback, context)
+    leaf = rendered.split("/")[-1] if rendered else ""
+    clean = sanitize_path_component(leaf)
+    return clean or fallback
+
+
+def _unique_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    stem = path.stem
+    suffix = path.suffix
+    counter = 2
+    while True:
+        candidate = path.with_name(f"{stem}_{counter}{suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def organize_files_in_directory(
+    *,
+    base_dir: Path,
+    folder_rule: str,
+    video_rule: str,
+    poster_rule: str,
+    recursive: bool,
+    apply_changes: bool,
+) -> dict[str, Any]:
+    if not base_dir.exists() or not base_dir.is_dir():
+        return {"ok": False, "error": "目录不存在或不是文件夹。"}
+
+    folders = _iter_leaf_media_folders(base_dir, recursive=recursive)
+    summary = {
+        "folders_scanned": len(folders),
+        "folders_updated": 0,
+        "videos_renamed": 0,
+        "posters_renamed": 0,
+        "posters_deleted": 0,
+        "nfo_renamed": 0,
+        "nfo_deleted": 0,
+        "skipped_no_number": 0,
+        "skipped_no_title": 0,
+    }
+    details: list[dict[str, Any]] = []
+
+    for folder, videos in folders:
+        number, title = _extract_number_title_from_folder(folder, videos)
+        if not number:
+            summary["skipped_no_number"] += 1
+            continue
+        if not title:
+            summary["skipped_no_title"] += 1
+            continue
+
+        context = build_template_context(number=number, title=title)
+        folder_name = _render_name_rule(folder_rule, context=context, fallback=f"{number} {title}")
+        video_base = _render_name_rule(video_rule, context=context, fallback=number)
+        poster_name = _render_name_rule(poster_rule, context=context, fallback=f"{number}_poster.jpg")
+        if "." not in poster_name:
+            poster_name += ".jpg"
+        canonical_poster = folder / poster_name
+
+        folder_actions: list[str] = []
+        ordered_videos = sorted(videos, key=lambda path: path.stat().st_size, reverse=True)
+        for index, video in enumerate(ordered_videos, start=1):
+            base = video_base if index == 1 else f"{video_base}_part{index}"
+            target_name = f"{base}{video.suffix.lower()}"
+            target = folder / target_name
+            if video.name == target_name:
+                continue
+            folder_actions.append(f"video: {video.name} -> {target_name}")
+            summary["videos_renamed"] += 1
+            if apply_changes:
+                video.rename(_unique_path(target))
+
+        poster_candidates = [item for item in folder.iterdir() if item.is_file() and _POSTER_CANDIDATE_RE.match(item.name)]
+        if poster_candidates:
+            selected = None
+            for item in poster_candidates:
+                if item.name.lower() == canonical_poster.name.lower():
+                    selected = item
+                    break
+            if selected is None:
+                selected = max(poster_candidates, key=lambda path: path.stat().st_size)
+
+            if selected.name != canonical_poster.name:
+                folder_actions.append(f"poster: {selected.name} -> {canonical_poster.name}")
+                summary["posters_renamed"] += 1
+                if apply_changes:
+                    if canonical_poster.exists():
+                        canonical_poster.unlink()
+                    if selected.suffix.lower() in {".jpg", ".jpeg"}:
+                        selected.rename(canonical_poster)
+                    else:
+                        shutil.copy2(selected, canonical_poster)
+                        selected.unlink(missing_ok=True)
+
+            for item in poster_candidates:
+                if item.name == canonical_poster.name:
+                    continue
+                folder_actions.append(f"poster delete: {item.name}")
+                summary["posters_deleted"] += 1
+                if apply_changes:
+                    item.unlink(missing_ok=True)
+
+        nfo_files = sorted(folder.glob("*.nfo"))
+        if nfo_files:
+            desired_nfo = folder / f"{number}.nfo"
+            keeper = None
+            for nfo in nfo_files:
+                if nfo.name.lower() == desired_nfo.name.lower():
+                    keeper = nfo
+                    break
+            if keeper is None:
+                keeper = nfo_files[0]
+                folder_actions.append(f"nfo: {keeper.name} -> {desired_nfo.name}")
+                summary["nfo_renamed"] += 1
+                if apply_changes:
+                    if desired_nfo.exists():
+                        desired_nfo.unlink()
+                    keeper.rename(desired_nfo)
+                keeper = desired_nfo
+            for nfo in nfo_files:
+                if keeper is not None and nfo.name == keeper.name:
+                    continue
+                folder_actions.append(f"nfo delete: {nfo.name}")
+                summary["nfo_deleted"] += 1
+                if apply_changes:
+                    nfo.unlink(missing_ok=True)
+
+        if folder.name != folder_name:
+            summary["folders_updated"] += 1
+            folder_actions.append(f"folder: {folder.name} -> {folder_name}")
+            if apply_changes:
+                folder.rename(_unique_path(folder.with_name(folder_name)))
+
+        if folder_actions:
+            details.append(
+                {
+                    "folder": str(folder),
+                    "number": number,
+                    "title": title,
+                    "actions": folder_actions,
+                }
+            )
+
+    return {
+        "ok": True,
+        "applied": apply_changes,
+        "base_dir": str(base_dir),
+        "summary": summary,
+        "details": details[:120],
+        "details_total": len(details),
+    }
+
+
 def _start_background_run(
     run_state: ConfigUiRunState,
     config_path: Path,
@@ -518,7 +764,14 @@ def _make_handler(config_path: Path, run_state: ConfigUiRunState):
             self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
 
         def do_POST(self) -> None:  # noqa: N802
-            if self.path not in ("/api/config", "/api/run", "/api/tasks/retry", "/api/pick-directory", "/api/open-path"):
+            if self.path not in (
+                "/api/config",
+                "/api/run",
+                "/api/tasks/retry",
+                "/api/pick-directory",
+                "/api/open-path",
+                "/api/files/organize",
+            ):
                 self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
                 return
 
@@ -544,6 +797,26 @@ def _make_handler(config_path: Path, run_state: ConfigUiRunState):
                 target_path = str(payload.get("path", "")).strip()
                 opened = _open_path_in_system(target_path)
                 self._send_json({"ok": opened})
+                return
+            if self.path == "/api/files/organize":
+                target_dir = Path(str(payload.get("directory", "")).strip()).expanduser()
+                folder_rule = str(payload.get("folder_rule", "{number} {title}")).strip() or "{number} {title}"
+                video_rule = str(payload.get("video_rule", "{number}")).strip() or "{number}"
+                poster_rule = str(payload.get("poster_rule", "{number}_poster.jpg")).strip() or "{number}_poster.jpg"
+                recursive = bool(payload.get("recursive", True))
+                apply_changes = bool(payload.get("apply", False))
+                result = organize_files_in_directory(
+                    base_dir=target_dir,
+                    folder_rule=folder_rule,
+                    video_rule=video_rule,
+                    poster_rule=poster_rule,
+                    recursive=recursive,
+                    apply_changes=apply_changes,
+                )
+                if result.get("ok"):
+                    self._send_json(result)
+                else:
+                    self._send_json(result, status=HTTPStatus.BAD_REQUEST)
                 return
             if self.path == "/api/tasks/retry":
                 video_path = str(payload.get("video_path", "")).strip()
@@ -2072,49 +2345,45 @@ def render_config_ui_html() -> str:
           <section class="view" id="filesView">
         <div class="view-head">
           <div class="view-kicker">Files</div>
-          <h2 class="view-title">文件</h2>
-          <div class="view-note">查看当前源目录、目标目录和配置文件目录的状态，也可以从这里直接打开对应文件夹。</div>
+          <h2 class="view-title">文件整理</h2>
+          <div class="view-note">这个模块只做一件事：按你指定的命名规则，批量整理某个目录下的媒体文件。</div>
         </div>
-        <div class="grid-3">
-          <div class="panel-card metric">
-            <div class="metric-label">源目录待处理</div>
-            <div class="metric-value" id="sourcePendingValue">0</div>
-            <div class="metric-sub">当前源目录里还能被扫描到的视频数。</div>
-          </div>
-          <div class="panel-card metric">
-            <div class="metric-label">目标库文件夹</div>
-            <div class="metric-value" id="libraryFolderValue">0</div>
-            <div class="metric-sub">目标目录下已有的媒体库文件夹数量。</div>
-          </div>
-          <div class="panel-card metric">
-            <div class="metric-label">最近失败</div>
-            <div class="metric-value" id="historyFailedValue">0</div>
-            <div class="metric-sub">历史记录中失败任务的数量。</div>
-          </div>
-        </div>
-        <div style="height:18px;"></div>
-        <div class="grid-3">
-          <div class="panel-card metric">
-            <div class="metric-label">源目录</div>
-            <div class="file-copy" id="sourceDirText">-</div>
-            <div class="file-actions">
-              <button type="button" class="secondary" id="openSourceDirButton">打开源目录</button>
+        <div class="panel-card metric" style="padding:18px;">
+          <div class="grid">
+            <div class="field full">
+              <label for="organizeDirectory">待整理目录</label>
+              <div class="input-with-button">
+                <input id="organizeDirectory" placeholder="/Volumes/VideoHub/国产传媒" />
+                <button type="button" class="secondary" id="browseOrganizeDirectoryButton">浏览…</button>
+                <button type="button" class="secondary" id="openOrganizeDirectoryButton">打开</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="organizeFolderRule">文件夹规则</label>
+              <input id="organizeFolderRule" value="{number} {title}" />
+              <div class="hint">示例: <code>MD-002 示例标题</code></div>
+            </div>
+            <div class="field">
+              <label for="organizeVideoRule">视频规则</label>
+              <input id="organizeVideoRule" value="{number}" />
+              <div class="hint">示例: <code>MD-002.mp4</code></div>
+            </div>
+            <div class="field">
+              <label for="organizePosterRule">海报规则</label>
+              <input id="organizePosterRule" value="{number}_poster.jpg" />
+              <div class="hint">统一保留单个海报文件。</div>
             </div>
           </div>
-          <div class="panel-card metric">
-            <div class="metric-label">目标目录</div>
-            <div class="file-copy" id="targetDirText">-</div>
-            <div class="file-actions">
-              <button type="button" class="secondary" id="openTargetDirButton">打开目标目录</button>
-            </div>
+          <div class="checks">
+            <label class="check"><input id="organizeRecursive" type="checkbox" checked /> 递归整理子目录</label>
           </div>
-          <div class="panel-card metric">
-            <div class="metric-label">配置文件目录</div>
-            <div class="file-copy" id="configDirText">-</div>
-            <div class="file-actions">
-              <button type="button" class="secondary" id="openConfigDirButton">打开配置目录</button>
-            </div>
+          <div class="actions">
+            <button type="button" class="secondary" id="previewOrganizeButton">预览整理</button>
+            <button type="button" class="primary" id="applyOrganizeButton">执行整理</button>
+            <div class="status" id="organizeStatusText">等待操作</div>
           </div>
+          <div class="run-body" id="organizeSummaryText">还没有预览结果。</div>
+          <div class="log-shell" id="organizeLogText">点击“预览整理”查看将要执行的文件改动。</div>
         </div>
           </section>
 
@@ -2230,6 +2499,14 @@ def render_config_ui_html() -> str:
     const taskDetailDialog = document.getElementById("taskDetailDialog");
     const taskDetailTitle = document.getElementById("taskDetailTitle");
     const taskDetailGrid = document.getElementById("taskDetailGrid");
+    const organizeDirectory = document.getElementById("organizeDirectory");
+    const organizeFolderRule = document.getElementById("organizeFolderRule");
+    const organizeVideoRule = document.getElementById("organizeVideoRule");
+    const organizePosterRule = document.getElementById("organizePosterRule");
+    const organizeRecursive = document.getElementById("organizeRecursive");
+    const organizeStatusText = document.getElementById("organizeStatusText");
+    const organizeSummaryText = document.getElementById("organizeSummaryText");
+    const organizeLogText = document.getElementById("organizeLogText");
     const rainCanvas = document.getElementById("rainCanvas");
     const rainFallback = document.getElementById("rainFallback");
     let rainMouse = { x: window.innerWidth * 0.5, y: window.innerHeight * 0.78, down: false };
@@ -2627,10 +2904,14 @@ def render_config_ui_html() -> str:
       }
       if (data.selected_path) {
         input.value = data.selected_path;
-        updateWelcomeState();
-        await validatePaths();
-        statusText.textContent = "目录已选择。";
-        statusText.className = "status ok";
+        if (fieldId === "organizeDirectory") {
+          setOrganizeStatus("目录已选择。", "status ok");
+        } else {
+          updateWelcomeState();
+          await validatePaths();
+          statusText.textContent = "目录已选择。";
+          statusText.className = "status ok";
+        }
       }
     }
 
@@ -2641,6 +2922,74 @@ def render_config_ui_html() -> str:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path }),
       });
+    }
+
+    function setOrganizeStatus(text, tone = "status") {
+      if (!organizeStatusText) return;
+      organizeStatusText.textContent = text;
+      organizeStatusText.className = tone;
+    }
+
+    function renderOrganizeResult(result) {
+      if (!organizeSummaryText || !organizeLogText) return;
+      const summary = result.summary || {};
+      organizeSummaryText.textContent = [
+        `扫描文件夹: ${summary.folders_scanned || 0}`,
+        `将调整文件夹: ${summary.folders_updated || 0}`,
+        `视频重命名: ${summary.videos_renamed || 0}`,
+        `海报重命名: ${summary.posters_renamed || 0}`,
+        `海报删除: ${summary.posters_deleted || 0}`,
+        `NFO重命名: ${summary.nfo_renamed || 0}`,
+        `NFO删除: ${summary.nfo_deleted || 0}`,
+        `跳过(缺番号): ${summary.skipped_no_number || 0}`,
+        `跳过(缺标题): ${summary.skipped_no_title || 0}`,
+      ].join("\\n");
+
+      const details = result.details || [];
+      if (!details.length) {
+        organizeLogText.textContent = "没有需要调整的文件。";
+        return;
+      }
+      const lines = [];
+      for (const item of details.slice(0, 40)) {
+        lines.push(`[${item.number || "-"}] ${item.title || "-"} @ ${item.folder || "-"}`);
+        for (const action of (item.actions || []).slice(0, 8)) {
+          lines.push(`  - ${action}`);
+        }
+      }
+      if ((result.details_total || 0) > details.length) {
+        lines.push(`... 还有 ${result.details_total - details.length} 项未展示`);
+      }
+      organizeLogText.textContent = lines.join("\\n");
+    }
+
+    async function runOrganizer(applyChanges) {
+      const directory = (organizeDirectory?.value || "").trim();
+      if (!directory) {
+        setOrganizeStatus("请先填写待整理目录。", "status warn");
+        return;
+      }
+      const payload = {
+        directory,
+        folder_rule: (organizeFolderRule?.value || "{number} {title}").trim(),
+        video_rule: (organizeVideoRule?.value || "{number}").trim(),
+        poster_rule: (organizePosterRule?.value || "{number}_poster.jpg").trim(),
+        recursive: Boolean(organizeRecursive?.checked),
+        apply: Boolean(applyChanges),
+      };
+      setOrganizeStatus(applyChanges ? "正在执行整理..." : "正在生成预览...", "status warn");
+      const response = await fetch("/api/files/organize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        setOrganizeStatus(data.error || "整理失败。", "status warn");
+        return;
+      }
+      renderOrganizeResult(data);
+      setOrganizeStatus(applyChanges ? "整理完成。" : "预览生成完成。", "status ok");
     }
 
     async function refreshPreview() {
@@ -2787,13 +3136,6 @@ def render_config_ui_html() -> str:
         }
       }
 
-      const files = data.files || {};
-      document.getElementById("sourcePendingValue").textContent = String(files.source_pending || 0);
-      document.getElementById("libraryFolderValue").textContent = String(files.library_folders || 0);
-      document.getElementById("historyFailedValue").textContent = String((data.tasks?.summary?.failed) || 0);
-      document.getElementById("sourceDirText").textContent = files.source_dir || "-";
-      document.getElementById("targetDirText").textContent = files.target_root || "-";
-      document.getElementById("configDirText").textContent = files.config_parent || "-";
     }
 
     async function loadDashboard() {
@@ -2845,6 +3187,9 @@ def render_config_ui_html() -> str:
       configPathBadge.textContent = data.config_path;
       document.getElementById("source_dir").value = data.source.dir ?? "";
       document.getElementById("target_root").value = data.target.root ?? "";
+      if (organizeDirectory && !organizeDirectory.value) {
+        organizeDirectory.value = data.target.root ?? "";
+      }
       document.getElementById("folder_template").value = data.output.folder_template ?? "{number} {title}";
       document.getElementById("max_images").value = data.output.max_images ?? 6;
       document.getElementById("extensions").value = (data.scanner.extensions ?? []).join(", ");
@@ -2993,6 +3338,10 @@ def render_config_ui_html() -> str:
     document.getElementById("reloadButtonBottom").addEventListener("click", loadConfig);
     document.getElementById("browseSourceButton").addEventListener("click", () => browseDirectory("source_dir"));
     document.getElementById("browseTargetButton").addEventListener("click", () => browseDirectory("target_root"));
+    document.getElementById("browseOrganizeDirectoryButton").addEventListener("click", () => browseDirectory("organizeDirectory"));
+    document.getElementById("openOrganizeDirectoryButton").addEventListener("click", () => openSystemPath(organizeDirectory?.value || ""));
+    document.getElementById("previewOrganizeButton").addEventListener("click", () => runOrganizer(false));
+    document.getElementById("applyOrganizeButton").addEventListener("click", () => runOrganizer(true));
     document.getElementById("runButton").addEventListener("click", () => saveAndRun("scrape"));
     document.getElementById("runButtonHome").addEventListener("click", () => saveAndRun("scrape"));
     document.getElementById("runButtonBottom").addEventListener("click", () => saveAndRun("scrape"));
@@ -3004,9 +3353,6 @@ def render_config_ui_html() -> str:
     document.getElementById("folder_template").addEventListener("input", refreshPreview);
     document.getElementById("source_dir").addEventListener("input", async () => { updateWelcomeState(); await validatePaths(); });
     document.getElementById("target_root").addEventListener("input", async () => { updateWelcomeState(); await validatePaths(); });
-    document.getElementById("openSourceDirButton").addEventListener("click", () => openSystemPath(document.getElementById("sourceDirText").textContent));
-    document.getElementById("openTargetDirButton").addEventListener("click", () => openSystemPath(document.getElementById("targetDirText").textContent));
-    document.getElementById("openConfigDirButton").addEventListener("click", () => openSystemPath(document.getElementById("configDirText").textContent));
     taskFilter.addEventListener("change", loadTasks);
     taskSearch.addEventListener("input", loadTasks);
     form.addEventListener("submit", saveConfig);
