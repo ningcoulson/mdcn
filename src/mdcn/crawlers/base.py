@@ -70,6 +70,7 @@ class BaseCrawler(abc.ABC):
             lambda: self._search(candidate, file_hint=file_hint),
             retries=self.retries,
             delay_seconds=0.4,
+            retry_exceptions=(httpx.HTTPError, TimeoutError, NetworkError),
         )
 
     async def fetch(self, url: str) -> str:
@@ -84,6 +85,7 @@ class BaseCrawler(abc.ABC):
                 do_fetch,
                 retries=self.retries,
                 delay_seconds=0.4,
+                retry_exceptions=(httpx.HTTPError, TimeoutError),
             )
         except httpx.HTTPError as exc:
             raise NetworkError(f"{self.name} failed to fetch {url}: {exc}") from exc

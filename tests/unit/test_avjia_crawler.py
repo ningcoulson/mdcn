@@ -78,3 +78,13 @@ def test_avjia_matcher_recognizes_number_inside_longer_title():
 
     assert crawler._matches_expected_number("91KCM-045", "国足雄起之鸡不可失 -RONA 91KCM045")
     assert crawler._matches_expected_number("91KCM045", "91KCM045 国足雄起之鸡不可失 RONA")
+
+
+def test_avjia_build_queries_filters_noisy_file_hint():
+    crawler = AvJiaCrawler()
+    queries = crawler._build_queries("XK-8193", "[ThZu.Cc]星空传媒XK8193儿媳大战-香菱.mp4")
+
+    assert queries[0] == "XK-8193"
+    assert "XK8193" in queries
+    assert len(queries) <= 4
+    assert all("[" not in query for query in queries)

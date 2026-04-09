@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import re
 from datetime import datetime
 from urllib.parse import quote, urljoin
@@ -34,12 +35,24 @@ class AvJiaCrawler(BaseCrawler):
             raise SearchError("avjia requires at least one search query")
 
         client = await self.ensure_client()
+        search_budget_seconds = max(10.0, min(18.0, self.timeout + 2.0))
+        started = time.monotonic()
         for query in queries:
+            elapsed = time.monotonic() - started
+            remaining_for_search = search_budget_seconds - elapsed
+            if remaining_for_search <= 0:
+                break
             for request_path, request_params in self._build_search_requests(query):
+                elapsed = time.monotonic() - started
+                remaining_for_search = search_budget_seconds - elapsed
+                if remaining_for_search <= 0:
+                    break
+                request_timeout = max(2.5, min(self.timeout, remaining_for_search))
                 try:
                     response = await client.get(
                         urljoin(self.base_url.rstrip("/") + "/", request_path.lstrip("/")),
                         params=request_params,
+                        timeout=request_timeout,
                         follow_redirects=True,
                     )
                     response.raise_for_status()
@@ -47,7 +60,14 @@ class AvJiaCrawler(BaseCrawler):
                     continue
                 if detail_url := self._parse_search_page(response.text, candidate.normalized):
                     return detail_url
-                if detail_url := await self._resolve_detail_from_candidates(response.text, candidate.normalized):
+                remaining_budget = search_budget_seconds - (time.monotonic() - started)
+                if remaining_budget <= 0:
+                    break
+                if detail_url := await self._resolve_detail_from_candidates(
+                    response.text,
+                    candidate.normalized,
+                    time_budget_seconds=min(6.0, remaining_budget),
+                ):
                     return detail_url
         raise SearchError(f"avjia did not find a match for {candidate.normalized}")
 
@@ -90,9 +110,13 @@ class AvJiaCrawler(BaseCrawler):
         )
 
     def _build_queries(self, number: str, file_hint: str) -> list[str]:
-        values = [number, re.sub(r"[^0-9A-Za-z]", "", number), file_hint]
+        values = [number, re.sub(r"[^0-9A-Za-z]", "", number)]
         if file_hint:
-            values.extend(part for part in re.split(r"[\s._-]", file_hint) if len(part) >= 4)
+            for part in re.findall(r"[A-Za-z0-9]{4,}", file_hint):
+                has_letter = any(char.isalpha() for char in part)
+                has_digit = any(char.isdigit() for char in part)
+                if has_letter and has_digit:
+                    values.append(part)
         queries: list[str] = []
         seen: set[str] = set()
         for value in values:
@@ -100,6 +124,8 @@ class AvJiaCrawler(BaseCrawler):
             if value and value not in seen:
                 seen.add(value)
                 queries.append(value)
+            if len(queries) >= 4:
+                break
         return queries
 
     def _build_search_requests(self, query: str) -> list[tuple[str, dict[str, str]]]:
@@ -115,13 +141,24 @@ class AvJiaCrawler(BaseCrawler):
                 return urljoin(self.base_url, href)
         return None
 
-    async def _resolve_detail_from_candidates(self, html: str, expected_number: str) -> str | None:
+    async def _resolve_detail_from_candidates(
+        self,
+        html: str,
+        expected_number: str,
+        *,
+        time_budget_seconds: float,
+    ) -> str | None:
         selector = Selector(text=html)
         client = await self.ensure_client()
-        for href, _title in self._iter_search_results(selector, limit=12):
+        started = time.monotonic()
+        for href, _title in self._iter_search_results(selector, limit=4):
+            elapsed = time.monotonic() - started
+            if elapsed >= time_budget_seconds:
+                break
+            request_timeout = max(2.0, min(self.timeout, time_budget_seconds - elapsed))
             detail_url = urljoin(self.base_url, href)
             try:
-                response = await client.get(detail_url, follow_redirects=True)
+                response = await client.get(detail_url, follow_redirects=True, timeout=request_timeout)
                 response.raise_for_status()
             except httpx.HTTPError:
                 continue
