@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import platform
+import subprocess
 import threading
 import webbrowser
 from dataclasses import dataclass, field
@@ -219,13 +221,18 @@ def _make_handler(config_path: Path, run_state: ConfigUiRunState):
             self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
 
         def do_POST(self) -> None:  # noqa: N802
-            if self.path not in ("/api/config", "/api/run", "/api/tasks/retry"):
+            if self.path not in ("/api/config", "/api/run", "/api/tasks/retry", "/api/pick-directory"):
                 self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
                 return
 
             length = int(self.headers.get("Content-Length", "0"))
             raw_body = self.rfile.read(length).decode("utf-8")
             payload = json.loads(raw_body)
+            if self.path == "/api/pick-directory":
+                initial_path = str(payload.get("initial_path", "")).strip()
+                selected = pick_directory(initial_path)
+                self._send_json({"ok": True, "selected_path": selected or ""})
+                return
             if self.path == "/api/tasks/retry":
                 video_path = str(payload.get("video_path", "")).strip()
                 started = _start_background_run(run_state, config_path, "retry_selected", video_paths=[video_path] if video_path else [])
@@ -389,6 +396,82 @@ def validate_path_settings(source_dir: str, target_root: str) -> dict[str, Any]:
     }
 
 
+def pick_directory(initial_path: str = "") -> str | None:
+    system = platform.system()
+    path = initial_path.strip()
+    if system == "Darwin":
+        return _pick_directory_macos(path)
+    if system == "Windows":
+        return _pick_directory_windows(path)
+    return _pick_directory_linux(path)
+
+
+def _pick_directory_macos(initial_path: str) -> str | None:
+    script_lines = []
+    if initial_path:
+        script_lines.append(
+            f'set chosenFolder to choose folder with prompt "Select a folder for mdcn" default location POSIX file "{initial_path}"'
+        )
+    else:
+        script_lines.append('set chosenFolder to choose folder with prompt "Select a folder for mdcn"')
+    script_lines.append("POSIX path of chosenFolder")
+    try:
+        result = subprocess.run(
+            ["osascript", *sum([["-e", line] for line in script_lines], [])],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    selected = result.stdout.strip()
+    return selected or None
+
+
+def _pick_directory_windows(initial_path: str) -> str | None:
+    start_path = initial_path.replace("'", "''")
+    script = f"""
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = 'Select a folder for mdcn'
+if ('{start_path}') {{ $dialog.SelectedPath = '{start_path}' }}
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{
+  Write-Output $dialog.SelectedPath
+}}
+"""
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-STA", "-Command", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    selected = result.stdout.strip()
+    return selected or None
+
+
+def _pick_directory_linux(initial_path: str) -> str | None:
+    commands: list[list[str]] = []
+    if initial_path:
+        commands.append(["zenity", "--file-selection", "--directory", f"--filename={initial_path}/"])
+        commands.append(["kdialog", "--getexistingdirectory", initial_path])
+    else:
+        commands.append(["zenity", "--file-selection", "--directory"])
+        commands.append(["kdialog", "--getexistingdirectory", os.path.expanduser("~")])
+
+    for command in commands:
+        try:
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+        selected = result.stdout.strip()
+        if selected:
+            return selected
+    return None
+
+
 def render_config_ui_html() -> str:
     return """<!doctype html>
 <html lang="zh-CN">
@@ -549,6 +632,12 @@ def render_config_ui_html() -> str:
       gap: 8px;
     }
     .field.full { grid-column: 1 / -1; }
+    .input-with-button {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
     label {
       font-size: 13px;
       font-weight: 700;
@@ -792,11 +881,17 @@ def render_config_ui_html() -> str:
           <div class="grid">
             <div class="field full">
               <label for="source_dir">源目录</label>
-              <input id="source_dir" name="source_dir" placeholder="/path/to/failed" />
+              <div class="input-with-button">
+                <input id="source_dir" name="source_dir" placeholder="/path/to/failed" />
+                <button type="button" class="secondary" id="browseSourceButton">浏览…</button>
+              </div>
             </div>
             <div class="field full">
               <label for="target_root">目标目录</label>
-              <input id="target_root" name="target_root" placeholder="/path/to/library" />
+              <div class="input-with-button">
+                <input id="target_root" name="target_root" placeholder="/path/to/library" />
+                <button type="button" class="secondary" id="browseTargetButton">浏览…</button>
+              </div>
             </div>
           </div>
           <div class="path-status" id="pathStatusText">正在检测目录状态...</div>
@@ -1016,6 +1111,26 @@ def render_config_ui_html() -> str:
       pathStatusText.textContent = lines.join("\\n");
       pathStatusText.className = data.can_run ? "path-status" : "path-status warn";
       return data;
+    }
+
+    async function browseDirectory(fieldId) {
+      const input = document.getElementById(fieldId);
+      const response = await fetch("/api/pick-directory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initial_path: input.value || "" }),
+      });
+      const data = await response.json();
+      if (!data.ok) {
+        statusText.textContent = data.error || "打开目录选择器失败。";
+        statusText.className = "status";
+        return;
+      }
+      if (data.selected_path) {
+        input.value = data.selected_path;
+        updateWelcomeState();
+        await validatePaths();
+      }
     }
 
     function renderRunStatus(data) {
@@ -1267,6 +1382,8 @@ def render_config_ui_html() -> str:
 
     document.getElementById("reloadButton").addEventListener("click", loadConfig);
     document.getElementById("reloadButtonBottom").addEventListener("click", loadConfig);
+    document.getElementById("browseSourceButton").addEventListener("click", () => browseDirectory("source_dir"));
+    document.getElementById("browseTargetButton").addEventListener("click", () => browseDirectory("target_root"));
     document.getElementById("runButton").addEventListener("click", () => saveAndRun("scrape"));
     document.getElementById("runButtonBottom").addEventListener("click", () => saveAndRun("scrape"));
     document.getElementById("retryFailedButton").addEventListener("click", () => saveAndRun("retry_failed"));

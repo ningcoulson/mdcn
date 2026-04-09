@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from subprocess import CalledProcessError
 
-from mdcn.app.config_ui import ConfigUiRunState, build_config_from_ui_payload, render_config_ui_html, validate_path_settings
+from mdcn.app.config_ui import (
+    ConfigUiRunState,
+    build_config_from_ui_payload,
+    pick_directory,
+    render_config_ui_html,
+    validate_path_settings,
+)
 
 
 def test_build_config_from_ui_payload_maps_fields():
@@ -59,6 +66,8 @@ def test_render_config_ui_html_contains_expected_controls():
     assert 'id="source_dir"' in html
     assert 'id="target_root"' in html
     assert 'id="pathStatusText"' in html
+    assert 'id="browseSourceButton"' in html
+    assert 'id="browseTargetButton"' in html
     assert 'id="folder_template"' in html
     assert 'id="site_order"' in html
     assert 'id="previewText"' in html
@@ -119,3 +128,35 @@ def test_validate_path_settings_reports_missing_source(tmp_path: Path):
     assert result["source_ready"] is False
     assert result["can_run"] is False
     assert "不存在" in result["source_message"]
+
+
+def test_pick_directory_uses_macos_picker(monkeypatch):
+    calls: list[list[str]] = []
+
+    class Result:
+        stdout = "/Users/demo/Movies\n"
+
+    def fake_run(command, check, capture_output, text):
+        calls.append(command)
+        return Result()
+
+    monkeypatch.setattr("mdcn.app.config_ui.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("mdcn.app.config_ui.subprocess.run", fake_run)
+
+    selected = pick_directory("/Users/demo")
+
+    assert selected == "/Users/demo/Movies"
+    assert calls
+    assert calls[0][0] == "osascript"
+
+
+def test_pick_directory_returns_none_when_picker_is_cancelled(monkeypatch):
+    def fake_run(command, check, capture_output, text):
+        raise CalledProcessError(returncode=1, cmd=command)
+
+    monkeypatch.setattr("mdcn.app.config_ui.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("mdcn.app.config_ui.subprocess.run", fake_run)
+
+    selected = pick_directory("/Users/demo")
+
+    assert selected is None
