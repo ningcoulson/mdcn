@@ -20,13 +20,22 @@ source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip >/dev/null
 python -m pip install -e ".[dev]"
 
+created_config=0
 if [ ! -f "$CONFIG_FILE" ]; then
   cp "$ROOT_DIR/config.example.toml" "$CONFIG_FILE"
+  created_config=1
 fi
 
 echo
 echo "mdcn quickstart is ready."
 echo "Config file: $CONFIG_FILE"
+if [ "$created_config" -eq 1 ]; then
+  echo "A new config.toml was created from the example file."
+fi
+echo "First-time setup:"
+echo "  1. Fill in your source folder"
+echo "  2. Fill in your target folder"
+echo "  3. Click '保存并开始刮削' in the browser page"
 echo "Launching local config UI..."
 echo
 

@@ -421,6 +421,36 @@ def render_config_ui_html() -> str:
       font-size: 13px;
       font-weight: 700;
     }
+    .welcome-card {
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(181, 71, 47, 0.22);
+      background: rgba(181, 71, 47, 0.08);
+    }
+    .welcome-title {
+      margin: 0 0 10px;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .welcome-body {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+      white-space: pre-line;
+    }
+    .welcome-alert {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.75);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.6;
+    }
     .panel { padding: 28px; }
     .toolbar {
       display: flex;
@@ -666,6 +696,13 @@ def render_config_ui_html() -> str:
       <h1>Config<br/>Studio</h1>
       <p class="lede">用一个本地网页把常用配置调顺，再交给命令行执行。适合先设置目录、命名规则、站点地址，再开始批量刮削。</p>
       <div class="badge" id="configPathBadge">loading config...</div>
+      <section class="welcome-card">
+        <h2 class="welcome-title">开始使用</h2>
+        <div class="welcome-body" id="welcomeNotice">1. 填写源目录
+2. 填写目标目录
+3. 点击“保存并开始刮削”</div>
+        <div class="welcome-alert" id="welcomeAlert">首次启动时，请先把默认示例路径改成你自己的真实目录。</div>
+      </section>
     </aside>
     <main class="panel">
       <div class="toolbar">
@@ -841,6 +878,8 @@ def render_config_ui_html() -> str:
     const form = document.getElementById("configForm");
     const statusText = document.getElementById("statusText");
     const configPathBadge = document.getElementById("configPathBadge");
+    const welcomeNotice = document.getElementById("welcomeNotice");
+    const welcomeAlert = document.getElementById("welcomeAlert");
     const previewText = document.getElementById("previewText");
     const runStatusText = document.getElementById("runStatusText");
     const taskSummaryText = document.getElementById("taskSummaryText");
@@ -860,6 +899,36 @@ def render_config_ui_html() -> str:
         payload[name] = document.getElementById(name).checked;
       }
       return payload;
+    }
+
+    function isPlaceholderPath(value) {
+      if (!value) {
+        return true;
+      }
+      const normalized = String(value).trim().toLowerCase();
+      return normalized.startsWith("/path/to/") || normalized === "/path/to/failed" || normalized === "/path/to/library";
+    }
+
+    function updateWelcomeState() {
+      const sourceDir = document.getElementById("source_dir").value;
+      const targetRoot = document.getElementById("target_root").value;
+      const sourceReady = !isPlaceholderPath(sourceDir);
+      const targetReady = !isPlaceholderPath(targetRoot);
+
+      const lines = [
+        `${sourceReady ? "1. 已设置" : "1. 待设置"} 源目录`,
+        `${targetReady ? "2. 已设置" : "2. 待设置"} 目标目录`,
+        `${sourceReady && targetReady ? "3. 现在可以点击“保存并开始刮削”" : "3. 先把两个目录都改成真实路径"}`,
+      ];
+      welcomeNotice.textContent = lines.join("\\n");
+
+      if (sourceReady && targetReady) {
+        welcomeAlert.textContent = "目录已经准备好，可以直接保存配置并启动刮削。";
+        welcomeAlert.style.color = "var(--ok)";
+      } else {
+        welcomeAlert.textContent = "首次启动时，请先把默认示例路径改成你自己的真实目录。";
+        welcomeAlert.style.color = "var(--accent)";
+      }
     }
 
     function renderRunStatus(data) {
@@ -1025,6 +1094,7 @@ def render_config_ui_html() -> str:
       document.getElementById("site_avjia_mirrors").value = (data.sites.avjia?.mirrors ?? []).join(", ");
       document.getElementById("site_tianmei_base_url").value = data.sites.tianmei?.base_url ?? "";
       document.getElementById("site_tianmei_mirrors").value = (data.sites.tianmei?.mirrors ?? []).join(", ");
+      updateWelcomeState();
       await refreshPreview();
       await loadRunStatus();
       await loadTasks();
@@ -1112,6 +1182,8 @@ def render_config_ui_html() -> str:
     taskSearch.addEventListener("input", loadTasks);
     document.getElementById("closeTaskDetailButton").addEventListener("click", () => taskDetailDialog.close());
     document.getElementById("folder_template").addEventListener("input", refreshPreview);
+    document.getElementById("source_dir").addEventListener("input", updateWelcomeState);
+    document.getElementById("target_root").addEventListener("input", updateWelcomeState);
     form.addEventListener("submit", saveConfig);
     loadConfig();
     setInterval(async () => {

@@ -65,6 +65,8 @@ def test_render_config_ui_html_contains_expected_controls():
     assert 'id="refreshTasksButton"' in html
     assert 'id="taskSearch"' in html
     assert 'id="taskDetailDialog"' in html
+    assert 'id="welcomeNotice"' in html
+    assert 'id="welcomeAlert"' in html
     assert 'id="site_madouqu_base_url"' in html
     assert 'id="site_madouqu_mirrors"' in html
     assert 'id="site_madouclub_base_url"' in html
@@ -73,6 +75,7 @@ def test_render_config_ui_html_contains_expected_controls():
     assert 'id="site_avjia_mirrors"' in html
     assert 'id="site_tianmei_base_url"' in html
     assert 'id="site_tianmei_mirrors"' in html
+    assert "保存并开始刮削" in html
 
 
 def test_config_ui_run_state_tracks_lifecycle():
